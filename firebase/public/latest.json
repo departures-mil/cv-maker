@@ -1,14 +1,14 @@
 {
-  "version": "1.1.0",
-  "displayVersion": "1.1",
-  "fileName": "CV Maker v1.1.exe",
-  "url": "https://github.com/departures-mil/cv-maker/releases/download/v1.1/CV-Maker-v1.1.exe",
-  "size": 96517700,
-  "sha256": "141eaa9b8dc62b02ad713227d7402ac9a40da79793f7209a217fc2cbab574ba6",
-  "date": "2026-10-31T12:26:42.489Z",
+  "version": "1.2.0",
+  "displayVersion": "1.2",
+  "fileName": "CV Maker v1.2.exe",
+  "url": "https://github.com/departures-mil/cv-maker/releases/download/v1.2/CV-Maker-v1.2.exe",
+  "size": 96516017,
+  "sha256": "47a9b88da11c6888a50d4dddd8293a05a0dd70c672fab455e1b8c4b0410fa70e",
+  "date": "2026-10-31T12:34:32.261Z",
   "notes": {
-    "tr": "Kişisel bilgilerde özel alanlar dahil tüm alanlar sürükle-bırak ile sıralanabiliyor. Arayüz ve tarih kutuları seçilen dile tamamen çevrildi. Özel alan adlarına çeviri eklenebiliyor. Yeni güncelleme gelince bildirim çıkıyor.",
-    "en": "All personal fields, including custom ones, can be reordered by drag and drop. Interface and date pickers are fully translated. Custom field names can have translations. A notification appears when an update is available.",
-    "ar": "يمكن إعادة ترتيب جميع الحقول الشخصية، بما فيها الحقول المخصصة، بالسحب والإفلات. تمت ترجمة الواجهة ومنتقيات التاريخ بالكامل. يمكن إضافة ترجمات لأسماء الحقول المخصصة. يظهر إشعار عند توفر تحديث."
+    "tr": "Tek tıkla güncelleme yenilendi: indirme yüzdesi görünüyor, hata olursa Tekrar dene / Tarayıcıda indir seçenekleri çıkıyor, yeni sürüm kendiliğinden açılıyor.",
+    "en": "One-click update reworked: download percentage is shown, Try again / Download in browser appear on errors, and the new version opens by itself.",
+    "ar": "تم تحسين التحديث بنقرة واحدة: تظهر نسبة التنزيل، وتظهر خيارات إعادة المحاولة أو التنزيل عبر المتصفح عند حدوث خطأ، ويفتح الإصدار الجديد تلقائيًا."
   }
 }
