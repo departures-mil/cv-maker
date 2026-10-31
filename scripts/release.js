@@ -127,6 +127,11 @@ async function main() {
   } finally {
     if (keyFile) fs.unlinkSync(keyFile);
   }
+  try {
+    sh('git', ['add', 'firebase/public']);
+    sh('git', ['commit', '-m', `Publish update manifest for CV Maker ${tag}`]);
+    sh('git', ['push', 'origin', 'HEAD:main']);
+  } catch {}
   console.log(`\nPublished CV Maker ${tag}: ${manifest.url}`);
 }
 

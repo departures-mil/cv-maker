@@ -1,14 +1,14 @@
 {
-  "version": "1.0.1",
-  "displayVersion": "1.0",
-  "fileName": "CV Maker v1.0.exe",
-  "url": "https://github.com/departures-mil/cv-maker/releases/download/v1.0/CV-Maker-v1.0.exe",
-  "size": 96514664,
-  "sha256": "03ce73ff59fcc11a890f594ac0b4a975057a4affc962a38936338005bc1fbf3c",
-  "date": "2026-10-31T00:48:20.259Z",
+  "version": "1.1.0",
+  "displayVersion": "1.1",
+  "fileName": "CV Maker v1.1.exe",
+  "url": "https://github.com/departures-mil/cv-maker/releases/download/v1.1/CV-Maker-v1.1.exe",
+  "size": 96517700,
+  "sha256": "141eaa9b8dc62b02ad713227d7402ac9a40da79793f7209a217fc2cbab574ba6",
+  "date": "2026-10-31T12:26:42.489Z",
   "notes": {
-    "tr": "İlk sürüm",
-    "en": "First release",
-    "ar": "الإصدار الأول"
+    "tr": "Kişisel bilgilerde özel alanlar dahil tüm alanlar sürükle-bırak ile sıralanabiliyor. Arayüz ve tarih kutuları seçilen dile tamamen çevrildi. Özel alan adlarına çeviri eklenebiliyor. Yeni güncelleme gelince bildirim çıkıyor.",
+    "en": "All personal fields, including custom ones, can be reordered by drag and drop. Interface and date pickers are fully translated. Custom field names can have translations. A notification appears when an update is available.",
+    "ar": "يمكن إعادة ترتيب جميع الحقول الشخصية، بما فيها الحقول المخصصة، بالسحب والإفلات. تمت ترجمة الواجهة ومنتقيات التاريخ بالكامل. يمكن إضافة ترجمات لأسماء الحقول المخصصة. يظهر إشعار عند توفر تحديث."
   }
 }
