@@ -22,6 +22,20 @@ const PERSONAL_FIELDS = [
   { k: 'github', type: 'url' },
 ];
 
+/* Ways a phone number can be reached. Each number has its own set. */
+const PHONE_CHANNELS = ['call', 'sms', 'whatsapp', 'telegram', 'signal', 'viber'];
+const newPhone = (value = '', apps = ['call']) => ({ id: uid(), value, apps: apps.slice() });
+function normPhones(list, legacy) {
+  let out = Array.isArray(list) ? list.filter((p) => p && typeof p === 'object') : [];
+  if (!out.length && legacy && String(legacy).trim()) out = [newPhone(String(legacy).trim())];
+  for (const p of out) {
+    p.id = p.id || uid();
+    p.value = p.value || '';
+    p.apps = (Array.isArray(p.apps) ? p.apps : ['call']).filter((a, i, arr) => PHONE_CHANNELS.includes(a) && arr.indexOf(a) === i);
+  }
+  return out;
+}
+
 const LANGUAGE_LEVELS = ['native', 'fluent', 'advanced', 'intermediate', 'beginner'];
 
 /*
@@ -119,8 +133,15 @@ const SECTION_TYPES = {
   },
   references: {
     icon: '👥', side: false,
-    fields: [{ k: 'name', type: 'text' }, { k: 'position', type: 'text' }, { k: 'company', type: 'text' }, { k: 'phone', type: 'tel' }, { k: 'email', type: 'email' }],
-    view: (it) => ({ title: it.name, subtitle: [it.position, it.company].filter(Boolean).join(', '), extra: [it.phone, it.email].filter(Boolean).join(' · ') }),
+    fields: [{ k: 'name', type: 'text' }, { k: 'position', type: 'text' }, { k: 'company', type: 'text' }, { k: 'phones', type: 'phones' }, { k: 'email', type: 'email' }],
+    view: (it, f) => {
+      const phones = (it.phones || []).filter((p) => String(p.value || '').trim());
+      return {
+        title: it.name, subtitle: [it.position, it.company].filter(Boolean).join(', '),
+        phones, email: it.email,
+        extra: [...phones.map((p) => f.phoneText(p)), it.email].filter(Boolean).join(' · '),
+      };
+    },
     summary: (it) => it.name,
   },
   hobbies: {
@@ -184,6 +205,7 @@ function newItem(type) {
   for (const f of SECTION_TYPES[type].fields) {
     if (f.type === 'check') it[f.k] = f.k === 'append';
     else if (f.type === 'range') it[f.k] = 3;
+    else if (f.type === 'phones') it[f.k] = [newPhone()];
     else if (f.type !== 'file') it[f.k] = '';
   }
   return it;
@@ -196,6 +218,7 @@ function newSection(type, withItem = true) {
 function newCv(name) {
   const personal = {};
   for (const f of PERSONAL_FIELDS) personal[f.k] = { value: '', visible: true };
+  personal.phone.numbers = [newPhone()];
   return {
     id: uid(),
     name: name || 'CV',
@@ -229,12 +252,24 @@ function normalizeCv(cv) {
   }
   for (const id of customIds) if (!cv.personalOrder.includes(id)) cv.personalOrder.push(id);
   for (const c of cv.customFields) c.labels = c.labels || {};
+  // Phone numbers: several per person, each with its own channels (call, WhatsApp, …).
+  const ph = cv.personal.phone;
+  ph.numbers = normPhones(ph.numbers, ph.value);
+  if (!ph.numbers.length) ph.numbers = [newPhone()];
+  ph.value = ph.numbers.map((n) => n.value).filter(Boolean).join(', ');
   cv.design = Object.assign({}, base.design, cv.design);
   cv.sections = (cv.sections || []).filter((s) => SECTION_TYPES[s.type]);
   for (const s of cv.sections) {
     s.items = s.items || [];
     if (s.visible === undefined) s.visible = true;
     if (s.side === undefined) s.side = SECTION_TYPES[s.type].side;
+    if (s.type === 'references') {
+      for (const it of s.items) {
+        it.phones = normPhones(it.phones, it.phone);
+        if (!it.phones.length) it.phones = [newPhone()];
+        delete it.phone;
+      }
+    }
   }
   cv.lang = cv.lang || 'auto';
   return cv;

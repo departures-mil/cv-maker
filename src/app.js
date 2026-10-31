@@ -1,5 +1,5 @@
 'use strict';
-/* global I18N, tr, SECTION_TYPES, PERSONAL_FIELDS, LANGUAGE_LEVELS, FONTS, BUILTIN_TEMPLATES, DESIGN_KEYS,
+/* global PHONE_CHANNELS, newPhone, I18N, tr, SECTION_TYPES, PERSONAL_FIELDS, LANGUAGE_LEVELS, FONTS, BUILTIN_TEMPLATES, DESIGN_KEYS,
    pickDesign, newItem, newSection, newCv, normalizeCv, buildSample, buildModel, renderCvHtml, exportHtmlDocument, uid, pdfjsLib */
 
 // window.api is provided by preload.js
@@ -651,7 +651,9 @@ function personalCard() {
     }
     const def = PERSONAL_FIELDS.find((f) => f.k === k);
     const p = cv.personal[k];
-    const input = def.type === 'date'
+    const input = k === 'phone'
+      ? phonesEditor(p.numbers, () => { p.value = p.numbers.map((n) => n.value).filter(Boolean).join(', '); })
+      : def.type === 'date'
       ? datePicker(p.value, (v) => { p.value = v; changed(); }, { withDay: true })
       : h('input', {
         class: 'input', type: 'text', value: p.value, dir: 'auto',
@@ -785,10 +787,43 @@ function fieldInput(s, it, f) {
           f.options.map((o) => h('option', { value: o, selected: it[f.k] === o }, t(f.optPrefix + o)))));
     case 'file':
       return h('div', { class: 'field full' }, h('span', null, t('field.file')), fileWidget(s, it));
+    case 'phones':
+      if (!Array.isArray(it.phones) || !it.phones.length) it.phones = [newPhone()];
+      return h('div', { class: 'field full' }, h('span', null, t('field.phones')), phonesEditor(it.phones, () => {}));
     default:
       return h('label', { class: 'field' }, h('span', null, label),
         h('input', { class: 'input', type: 'text', value: it[f.k] || '', dir: 'auto', oninput: (e) => set(e.target.value, e.target) }));
   }
+}
+
+/* Several phone numbers, each with its own channels (call, SMS, WhatsApp, Telegram, Signal, Viber). */
+function phonesEditor(list, onEdit) {
+  const box = h('div', { class: 'phones' });
+  list.forEach((n, i) => {
+    const chips = h('div', { class: 'ch-chips' }, PHONE_CHANNELS.map((c) => {
+      const on = n.apps.includes(c);
+      return h('button', {
+        type: 'button', class: `ch-chip ch-${c}${on ? ' on' : ''}`, title: t('ch.' + c), 'aria-pressed': on ? 'true' : 'false',
+        onclick: (e) => {
+          n.apps = n.apps.includes(c) ? n.apps.filter((x) => x !== c) : PHONE_CHANNELS.filter((x) => x === c || n.apps.includes(x));
+          const b = e.currentTarget;
+          b.classList.toggle('on', n.apps.includes(c));
+          b.setAttribute('aria-pressed', n.apps.includes(c) ? 'true' : 'false');
+          onEdit();
+          changed();
+        },
+      }, h('i', { class: 'ch-dot' }), t('ch.' + c));
+    }));
+    box.append(h('div', { class: 'phone-row' },
+      h('div', { class: 'phone-line' },
+        h('input', { class: 'input', type: 'tel', dir: 'ltr', value: n.value, placeholder: t('ph.phone') !== 'ph.phone' ? t('ph.phone') : '+90 5xx xxx xx xx',
+          oninput: (e) => { n.value = e.target.value; onEdit(); changed(); } }),
+        list.length > 1 ? iconBtn('🗑', t('removePhone'), () => { list.splice(i, 1); onEdit(); changed(true); }, 'danger') : null),
+      chips));
+  });
+  box.append(h('button', { type: 'button', class: 'btn small', onclick: () => { list.push(newPhone()); onEdit(); changed(true); } }, '＋ ' + t('addPhone')),
+    h('small', { class: 'muted' }, t('phoneChannelsHint')));
+  return box;
 }
 
 function fileWidget(s, it) {
