@@ -10,7 +10,10 @@ const { buildDocx } = require('./lib/docx');
 const updater = require('./lib/updater');
 
 const APP_NAME = 'CV Maker';
-const [MAJOR, MINOR] = app.getVersion().split('.');
+// Version of the code that is running (an update bundle can be newer than the .exe).
+const APP_VERSION = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8')).version;
+const SHELL_VERSION = app.getVersion();
+const [MAJOR, MINOR] = APP_VERSION.split('.');
 const DISPLAY_VERSION = `${MAJOR}.${MINOR}`;
 const TITLE = `${APP_NAME} v${DISPLAY_VERSION}`;
 
@@ -63,7 +66,11 @@ function createWindow() {
   });
   Menu.setApplicationMenu(null);
   win.on('page-title-updated', (e) => e.preventDefault());
-  win.once('ready-to-show', () => { win.setFullScreen(true); win.show(); });
+  win.once('ready-to-show', () => {
+    win.setFullScreen(true);
+    win.show();
+    if (global.__CVM_MARK_OK) global.__CVM_MARK_OK();
+  });
   win.webContents.on('before-input-event', (_e, input) => {
     if (input.type === 'keyDown' && input.key === 'F11') win.setFullScreen(!win.isFullScreen());
     if (input.type === 'keyDown' && input.key === 'F12' && !app.isPackaged) win.webContents.toggleDevTools();
@@ -81,6 +88,7 @@ function updateLog(line) {
 // After a one-click update the new .exe is started with --cleanup-old=<previous exe>.
 const cleanupArg = process.argv.find((a) => a.startsWith('--cleanup-old='));
 const cleanupOld = cleanupArg ? cleanupArg.slice('--cleanup-old='.length) : '';
+const afterUpdate = !!cleanupOld || process.argv.includes('--after-update');
 function removeOldExe(tries = 0) {
   if (!cleanupOld || cleanupOld === process.env.PORTABLE_EXECUTABLE_FILE) return;
   fs.unlink(cleanupOld, (err) => {
@@ -92,7 +100,7 @@ function removeOldExe(tries = 0) {
 
 // The previous version may still be closing; wait for the single-instance lock instead of quitting.
 async function acquireLock() {
-  for (let i = 0; i < (cleanupOld ? 40 : 1); i++) {
+  for (let i = 0; i < (afterUpdate ? 40 : 1); i++) {
     if (app.requestSingleInstanceLock()) return true;
     await new Promise((r) => setTimeout(r, 500));
   }
@@ -109,7 +117,8 @@ app.on('window-all-closed', () => app.quit());
 // ---------- app info / window ----------
 ipcMain.handle('app:info', () => ({
   name: APP_NAME,
-  version: app.getVersion(),
+  version: APP_VERSION,
+  shellVersion: SHELL_VERSION,
   displayVersion: DISPLAY_VERSION,
   title: TITLE,
   portable: !!PORTABLE_DIR,
@@ -268,12 +277,56 @@ ipcMain.handle('jpeg:save', (_e, { target, images, open }) => {
 });
 
 // ---------- updates ----------
-ipcMain.handle('update:check', (_e, override) => updater.check(app.getVersion(), override));
+// Two kinds of update:
+//  * bundle: only the app's own files (~1 MB), unpacked into CV Maker Data/app/<version>
+//    and picked up by boot.js on the next start. Used when this .exe is new enough.
+//  * exe: the full portable .exe (~100 MB) for older .exe versions or dependency changes.
+const BUNDLE_ROOT = path.join(DATA_DIR, 'app');
+function canUseBundle(m) {
+  return !!(m && m.bundle && m.bundle.url && fs.existsSync(path.join(global.__CVM_BASE || __dirname, 'boot.js'))
+    && updater.cmp(SHELL_VERSION, m.bundle.minShell || '999') >= 0);
+}
+ipcMain.handle('update:check', (_e, override) => updater.check(APP_VERSION, override));
 ipcMain.handle('update:download', async (_e, manifest) => {
+  const progress = (p) => win && win.webContents.send('update:progress', p);
+  if (canUseBundle(manifest)) {
+    try {
+      const dir = await updater.downloadBundle(manifest, BUNDLE_ROOT, progress);
+      updateLog(`bundle ${manifest.version} unpacked to ${dir}`);
+      return { kind: 'bundle', version: manifest.version, path: dir };
+    } catch (e) {
+      updateLog('bundle failed, falling back to exe: ' + e.message);
+    }
+  }
   const targetDir = PORTABLE_DIR || app.getPath('downloads');
-  return updater.download(manifest, targetDir, (p) => win && win.webContents.send('update:progress', p));
+  return updater.download(manifest, targetDir, progress);
 });
-ipcMain.handle('update:apply', (_e, newExePath) => {
+function restartSelf(extraArgs) {
+  const exe = process.env.PORTABLE_EXECUTABLE_FILE;
+  if (exe) {
+    spawn(exe, extraArgs, { detached: true, stdio: 'ignore', cwd: path.dirname(exe) }).unref();
+  } else {
+    app.relaunch({ args: process.argv.slice(1).filter((a) => !a.startsWith('--cleanup-old=') && a !== '--after-update').concat(extraArgs) });
+  }
+  setTimeout(() => app.exit(0), 400);
+}
+ipcMain.handle('update:apply', (_e, target) => {
+  if (target && typeof target === 'object' && target.kind === 'bundle') {
+    // Keep the .exe name in step with the version shown in the title ("CV Maker v1.4.exe").
+    const oldExe = process.env.PORTABLE_EXECUTABLE_FILE;
+    if (oldExe) {
+      const [ma, mi] = String(target.version).split('.');
+      const newExe = path.join(path.dirname(oldExe), `CV Maker v${ma}.${mi}.exe`);
+      if (newExe.toLowerCase() !== oldExe.toLowerCase() && !fs.existsSync(newExe)) {
+        try { fs.renameSync(oldExe, newExe); process.env.PORTABLE_EXECUTABLE_FILE = newExe; updateLog(`renamed ${oldExe} -> ${newExe}`); }
+        catch (e) { updateLog('rename skipped: ' + e.code); }
+      }
+    }
+    updateLog(`restart for bundle ${target.version}`);
+    try { restartSelf(['--after-update']); } catch (e) { updateLog('restart failed: ' + e.message); return { restarted: false, error: e.message }; }
+    return { restarted: true };
+  }
+  const newExePath = typeof target === 'string' ? target : target && target.path;
   const oldExe = process.env.PORTABLE_EXECUTABLE_FILE;
   if (process.platform !== 'win32' || !oldExe) {
     shell.showItemInFolder(newExePath);
@@ -292,3 +345,14 @@ ipcMain.handle('update:apply', (_e, newExePath) => {
   return { restarted: true };
 });
 ipcMain.on('update:openUrl', (_e, url) => { if (/^https:\/\//.test(url)) shell.openExternal(url); });
+
+// A full .exe update makes older unpacked bundles obsolete.
+setTimeout(() => {
+  try {
+    for (const d of fs.readdirSync(BUNDLE_ROOT)) {
+      if (d === 'current.json') continue;
+      const full = path.join(BUNDLE_ROOT, d);
+      if (full !== global.__CVM_BUNDLE && updater.cmp(d, APP_VERSION) <= 0) fs.rmSync(full, { recursive: true, force: true });
+    }
+  } catch {}
+}, 15000);
