@@ -160,6 +160,8 @@ async function boot() {
   api.onFullscreen(() => {});
   api.onUpdateProgress((p) => {
     S.update.progress = p.total ? p.received / p.total : 0;
+    S.update.received = p.received;
+    S.update.total = p.total;
     renderUpdateProgress();
   });
   if (S.settings.autoUpdate) {
@@ -1069,6 +1071,8 @@ function renderUpdateProgress() {
   if (bar) bar.style.width = S.update.progress * 100 + '%';
   const bb = document.getElementById('banner-bar');
   if (bb) bb.style.width = S.update.progress * 100 + '%';
+  const pct = document.getElementById('banner-pct');
+  if (pct) pct.textContent = progressText();
 }
 
 async function checkUpdates(silent) {
@@ -1094,20 +1098,40 @@ async function checkUpdates(silent) {
 function renderUpdateBanner() {
   const b = $('#update-banner');
   const u = S.update;
-  if (!['available', 'downloading'].includes(u.state)) { b.hidden = true; return; }
+  if (!u.manifest || !['available', 'downloading', 'ready', 'error'].includes(u.state) || (u.state === 'error' && !u.fromBanner)) { b.hidden = true; return; }
   const v = `CV Maker v${u.manifest.displayVersion || u.manifest.version}`;
   b.hidden = false;
-  b.replaceChildren(
-    h('span', null, '🎉 ' + t('updateAvailable', { v })),
-    u.state === 'downloading'
-      ? h('div', { class: 'progress small' }, h('i', { id: 'banner-bar', style: `width:${u.progress * 100}%` }))
-      : h('button', { class: 'btn primary small', onclick: doUpdate }, t('updateNow')),
-    u.state === 'available' ? h('button', { class: 'icon-btn', onclick: () => { b.hidden = true; } }, '✕') : null);
+  const items = [];
+  if (u.state === 'available') {
+    items.push(h('span', null, '🎉 ' + t('updateAvailable', { v })),
+      h('button', { class: 'btn primary small', onclick: doUpdate }, t('updateNow')),
+      h('button', { class: 'icon-btn', onclick: () => { b.hidden = true; } }, '✕'));
+  } else if (u.state === 'downloading') {
+    items.push(h('span', null, t('updateDownloading', { v })),
+      h('div', { class: 'progress small' }, h('i', { id: 'banner-bar', style: `width:${u.progress * 100}%` })),
+      h('b', { id: 'banner-pct', class: 'pct' }, progressText()));
+  } else if (u.state === 'ready') {
+    items.push(h('span', null, t('updateRestarting')));
+  } else {
+    items.push(h('span', null, '⚠ ' + t('updateFailed')),
+      h('button', { class: 'btn small', onclick: doUpdate }, t('retry')),
+      h('button', { class: 'btn small', onclick: () => api.openUrl(u.manifest.url) }, t('downloadInBrowser')),
+      h('button', { class: 'icon-btn', onclick: () => { b.hidden = true; } }, '✕'));
+  }
+  b.replaceChildren(...items);
+}
+
+function progressText() {
+  const u = S.update;
+  const mb = (n) => (n / 1048576).toFixed(0);
+  return u.total ? `%${Math.round(u.progress * 100)} · ${mb(u.received)}/${mb(u.total)} MB` : `${mb(u.received || 0)} MB`;
 }
 
 async function doUpdate() {
   S.update.state = 'downloading';
   S.update.progress = 0;
+  S.update.received = 0;
+  S.update.fromBanner = true;
   renderUpdatePanel();
   renderUpdateBanner();
   try {
@@ -1115,9 +1139,15 @@ async function doUpdate() {
     const file = await api.downloadUpdate(S.update.manifest);
     S.update.state = 'ready';
     renderUpdatePanel();
-    toast(t('updateRestarting'), 'ok');
+    renderUpdateBanner();
+    api.saveCvsSync({ version: 1, cvs: S.cvs });
+    api.saveSettingsSync(S.settings);
     const r = await api.applyUpdate(file);
-    if (!r.restarted) toast(t('updateDownloadedManual', { path: file }), 'info', 8000);
+    if (!r.restarted) {
+      S.update.state = 'available';
+      renderUpdateBanner();
+      toast(t('updateDownloadedManual', { path: file }), 'info', 10000);
+    }
   } catch (e) {
     S.update.state = 'error';
     S.update.error = e.message || String(e);
