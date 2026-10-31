@@ -34,6 +34,7 @@ contextBridge.exposeInMainWorld('api', {
   checkUpdate: (override) => ipcRenderer.invoke('update:check', override),
   downloadUpdate: (m) => ipcRenderer.invoke('update:download', m),
   applyUpdate: (p) => ipcRenderer.invoke('update:apply', p),
+  openUrl: (u) => ipcRenderer.send('update:openUrl', u),
   notify: (o) => ipcRenderer.send('app:notify', o),
   onNotifyClick: (cb) => ipcRenderer.on('app:notifyClick', () => cb()),
   onUpdateProgress: (cb) => ipcRenderer.on('update:progress', (_e, p) => cb(p)),

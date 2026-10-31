@@ -74,10 +74,36 @@ function createWindow() {
   win.loadFile(path.join(__dirname, 'src', 'index.html'));
 }
 
-const gotLock = app.requestSingleInstanceLock();
-if (!gotLock) app.quit();
+function updateLog(line) {
+  try { fs.appendFileSync(path.join(DATA_DIR, 'update.log'), `${new Date().toISOString()} ${line}\n`); } catch {}
+}
+
+// After a one-click update the new .exe is started with --cleanup-old=<previous exe>.
+const cleanupArg = process.argv.find((a) => a.startsWith('--cleanup-old='));
+const cleanupOld = cleanupArg ? cleanupArg.slice('--cleanup-old='.length) : '';
+function removeOldExe(tries = 0) {
+  if (!cleanupOld || cleanupOld === process.env.PORTABLE_EXECUTABLE_FILE) return;
+  fs.unlink(cleanupOld, (err) => {
+    if (!err || err.code === 'ENOENT') return updateLog('removed ' + cleanupOld);
+    if (tries < 60) setTimeout(() => removeOldExe(tries + 1), 1000);
+    else updateLog('could not remove ' + cleanupOld + ': ' + err.code);
+  });
+}
+
+// The previous version may still be closing; wait for the single-instance lock instead of quitting.
+async function acquireLock() {
+  for (let i = 0; i < (cleanupOld ? 40 : 1); i++) {
+    if (app.requestSingleInstanceLock()) return true;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  return false;
+}
 app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
-app.whenReady().then(createWindow);
+app.whenReady().then(async () => {
+  if (!(await acquireLock())) return app.quit();
+  createWindow();
+  removeOldExe();
+});
 app.on('window-all-closed', () => app.quit());
 
 // ---------- app info / window ----------
@@ -253,22 +279,16 @@ ipcMain.handle('update:apply', (_e, newExePath) => {
     shell.showItemInFolder(newExePath);
     return { restarted: false };
   }
-  const q = (s) => "'" + String(s).replace(/'/g, "''") + "'";
-  const script = path.join(os.tmpdir(), `cvmaker-update-${Date.now()}.ps1`);
-  const ps = [
-    `$old = ${q(oldExe)}`,
-    `$new = ${q(newExePath)}`,
-    'for ($i = 0; $i -lt 240; $i++) {',
-    '  if (-not (Test-Path -LiteralPath $old)) { break }',
-    '  try { Remove-Item -LiteralPath $old -Force -ErrorAction Stop; break } catch { Start-Sleep -Milliseconds 500 }',
-    '}',
-    'Start-Process -FilePath $new',
-    'Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue',
-  ].join('\r\n');
-  fs.writeFileSync(script, '﻿' + ps, 'utf8');
-  spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', script], {
-    detached: true, stdio: 'ignore', windowsHide: true,
-  }).unref();
-  setTimeout(() => app.quit(), 300);
+  // Start the new version directly; it deletes the old .exe once this one has exited.
+  updateLog(`apply: ${oldExe} -> ${newExePath}`);
+  try {
+    spawn(newExePath, [`--cleanup-old=${oldExe}`], { detached: true, stdio: 'ignore', cwd: path.dirname(newExePath) }).unref();
+  } catch (e) {
+    updateLog('spawn failed: ' + e.message);
+    shell.showItemInFolder(newExePath);
+    return { restarted: false, error: e.message };
+  }
+  setTimeout(() => app.exit(0), 400);
   return { restarted: true };
 });
+ipcMain.on('update:openUrl', (_e, url) => { if (/^https:\/\//.test(url)) shell.openExternal(url); });

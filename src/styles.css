@@ -242,3 +242,6 @@ kbd { display: inline-block; min-width: 56px; padding: 2px 6px; border: 1px soli
 .date-picker .input { padding: 6px 6px; }
 .icon-btn.on { color: var(--primary); }
 .add-field { margin-top: 10px; }
+
+.update-banner .pct { min-width: 150px; font-variant-numeric: tabular-nums; }
+.update-banner .btn.small:not(.primary) { color: var(--text); }
