@@ -1,7 +1,7 @@
 {
   "name": "cv-maker",
   "productName": "CV Maker",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "CV Maker",
   "main": "boot.js",
   "private": true,
