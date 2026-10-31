@@ -1,5 +1,5 @@
-Hızlı güncelleme: artık sadece değişen dosyalar (yaklaşık 1 MB) indiriliyor ve program birkaç saniyede yeni sürümle açılıyor.
+Telefon numaralarına iletişim yolu işaretleri: her numara için Arama, SMS, WhatsApp, Telegram, Signal ve Viber seçilebilir. Kişi ve referanslar için birden çok numara eklenebilir.
 
-Fast updates: only the changed files (about 1 MB) are downloaded and the app reopens on the new version within seconds.
+Contact channels for phone numbers: mark each number as reachable by call, SMS, WhatsApp, Telegram, Signal or Viber. Add several numbers for yourself and your references.
 
-تحديث سريع: يتم الآن تنزيل الملفات المتغيرة فقط (حوالي 1 ميغابايت) ويُعاد فتح البرنامج بالإصدار الجديد خلال ثوانٍ.
+طرق التواصل لأرقام الهاتف: حدّد لكل رقم الاتصال أو الرسائل أو واتساب أو تيليجرام أو سيجنال أو فايبر. يمكن إضافة عدة أرقام لك وللمراجع.
