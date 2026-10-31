@@ -1,0 +1,59 @@
+{
+  "name": "cv-maker",
+  "productName": "CV Maker",
+  "version": "1.0.0",
+  "description": "CV Maker",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "build": "node scripts/build.js",
+    "release": "node scripts/release.js"
+  },
+  "dependencies": {
+    "docx": "^9.14.0",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^3.11.174"
+  },
+  "devDependencies": {
+    "electron": "^38.8.6",
+    "electron-builder": "^26.18.0",
+    "firebase-tools": "^14.27.0"
+  },
+  "author": "CV Maker",
+  "build": {
+    "appId": "com.cvmaker.desktop",
+    "productName": "CV Maker",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "lib/**",
+      "src/**",
+      "build/icon.png",
+      "update-config.json",
+      "package.json",
+      "!**/*.map",
+      "!node_modules/pdfjs-dist/{legacy,web,types,image_decoders,lib}/**",
+      "!node_modules/pdfjs-dist/build/{pdf.js,pdf.worker.js,pdf.sandbox*,pdf.worker.entry.js}"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "portable": {
+      "artifactName": "CV Maker v${version}.exe"
+    },
+    "compression": "normal",
+    "publish": null
+  }
+}
