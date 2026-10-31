@@ -1,5 +1,5 @@
-Kişisel bilgilerde özel alanlar dahil tüm alanlar sürükle-bırak ile sıralanabiliyor. Arayüz ve tarih kutuları seçilen dile tamamen çevrildi. Özel alan adlarına çeviri eklenebiliyor. Yeni güncelleme gelince bildirim çıkıyor.
+Tek tıkla güncelleme yenilendi: indirme yüzdesi görünüyor, hata olursa Tekrar dene / Tarayıcıda indir seçenekleri çıkıyor, yeni sürüm kendiliğinden açılıyor.
 
-All personal fields, including custom ones, can be reordered by drag and drop. Interface and date pickers are fully translated. Custom field names can have translations. A notification appears when an update is available.
+One-click update reworked: download percentage is shown, Try again / Download in browser appear on errors, and the new version opens by itself.
 
-يمكن إعادة ترتيب جميع الحقول الشخصية، بما فيها الحقول المخصصة، بالسحب والإفلات. تمت ترجمة الواجهة ومنتقيات التاريخ بالكامل. يمكن إضافة ترجمات لأسماء الحقول المخصصة. يظهر إشعار عند توفر تحديث.
+تم تحسين التحديث بنقرة واحدة: تظهر نسبة التنزيل، وتظهر خيارات إعادة المحاولة أو التنزيل عبر المتصفح عند حدوث خطأ، ويفتح الإصدار الجديد تلقائيًا.
