@@ -98,7 +98,13 @@ async function main() {
 
   if (flag('no-deploy')) return console.log('Skipping deploy (--no-deploy).');
   const notesText = [manifest.notes.tr, manifest.notes.en !== manifest.notes.tr ? manifest.notes.en : '', manifest.notes.ar !== manifest.notes.tr ? manifest.notes.ar : ''].filter(Boolean).join('\n\n') || `CV Maker ${tag}`;
-  execFileSync('gh', ['release', 'create', tag, asset, '--repo', GITHUB_REPO, '--title', `CV Maker ${tag}`, '--notes', notesText, '--latest'], { stdio: 'inherit' });
+  // REST only (GraphQL-based `gh release` commands are not available everywhere).
+  const rel = JSON.parse(execFileSync('gh', ['api', '--method', 'POST', `repos/${GITHUB_REPO}/releases`,
+    '-f', `tag_name=${tag}`, '-f', `name=CV Maker ${tag}`, '-f', `body=${notesText}`, '-f', 'make_latest=true'], { encoding: 'utf8' }));
+  execFileSync('gh', ['api', '--method', 'POST', '-H', 'Content-Type: application/octet-stream',
+    `https://uploads.github.com/repos/${GITHUB_REPO}/releases/${rel.id}/assets?name=${encodeURIComponent(urlName)}`,
+    '--input', asset], { stdio: ['ignore', 'ignore', 'inherit'], maxBuffer: 1 << 26 });
+  console.log('GitHub release:', rel.html_url);
 
   const bin = path.join(ROOT, 'node_modules', '.bin', process.platform === 'win32' ? 'firebase.cmd' : 'firebase');
   const args = ['deploy', '--only', 'hosting', '--project', id, '--non-interactive', '--message', `CV Maker v${displayVersion}`];
