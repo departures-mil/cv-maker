@@ -1,8 +1,11 @@
 name: Build and release
 
+# A release is made whenever package.json lands on main with a version that has no release yet.
 on:
   push:
-    tags: ['v*']
+    branches: [main]
+    paths: ['package.json']
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -12,19 +15,29 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - name: Build portable exe
-        run: node scripts/build.js
-      - name: Publish GitHub release
+      - name: Read version
+        id: v
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          VER="${GITHUB_REF_NAME#v}"
-          SRC="dist/CV Maker v${VER}.exe"
-          OUT="dist/CV-Maker-v${VER}.exe"
-          cp "$SRC" "$OUT"
-          gh release create "$GITHUB_REF_NAME" "$OUT" --title "CV Maker $GITHUB_REF_NAME" --notes-file release-notes.md --latest
+          VER=$(node -p "require('./package.json').version.split('.').slice(0,2).join('.')")
+          echo "ver=$VER" >> "$GITHUB_OUTPUT"
+          if gh release view "v$VER" >/dev/null 2>&1; then echo "exists=1" >> "$GITHUB_OUTPUT"; fi
+      - uses: actions/setup-node@v4
+        if: steps.v.outputs.exists != '1'
+        with:
+          node-version: 22
+          cache: npm
+      - if: steps.v.outputs.exists != '1'
+        run: npm ci
+      - name: Build portable exe
+        if: steps.v.outputs.exists != '1'
+        run: node scripts/build.js
+      - name: Publish GitHub release
+        if: steps.v.outputs.exists != '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VER: ${{ steps.v.outputs.ver }}
+        run: |
+          cp "dist/CV Maker v${VER}.exe" "dist/CV-Maker-v${VER}.exe"
+          gh release create "v${VER}" "dist/CV-Maker-v${VER}.exe" --target "$GITHUB_SHA" --title "CV Maker v${VER}" --notes-file release-notes.md --latest
