@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; worker-src 'self' blob:; connect-src 'self' data: blob:">
+  <title>CV Maker</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="update-banner" class="update-banner" hidden></div>
+  <header class="topbar">
+    <div class="brand"><span class="logo">CV</span><span id="app-title">CV Maker</span></div>
+    <div class="tb-group">
+      <select id="cv-select" class="tb-select"></select>
+      <button class="tb-btn" id="btn-cv-menu" data-i18n-title="cvMenu">☰</button>
+    </div>
+    <div class="tb-group">
+      <button class="tb-btn icon" id="btn-undo" data-i18n-title="undo">↶</button>
+      <button class="tb-btn icon" id="btn-redo" data-i18n-title="redo">↷</button>
+    </div>
+    <div class="tb-spacer"></div>
+    <div class="tb-group">
+      <select id="lang-select" class="tb-select">
+        <option value="tr">Türkçe</option>
+        <option value="en">English</option>
+        <option value="ar">العربية</option>
+      </select>
+      <button class="tb-btn primary" id="btn-export"><span data-i18n="export"></span> ▾</button>
+      <button class="tb-btn icon" id="btn-settings" data-i18n-title="settings">⚙</button>
+    </div>
+    <div class="tb-group win">
+      <button class="tb-btn icon" id="btn-fullscreen" data-i18n-title="toggleFullscreen">⛶</button>
+      <button class="tb-btn icon" id="btn-min" data-i18n-title="minimize">—</button>
+      <button class="tb-btn icon danger" id="btn-close" data-i18n-title="close">✕</button>
+    </div>
+  </header>
+
+  <div class="workspace">
+    <aside class="editor-pane">
+      <nav class="tabs">
+        <button class="tab active" data-tab="content" data-i18n="tabContent"></button>
+        <button class="tab" data-tab="design" data-i18n="tabDesign"></button>
+      </nav>
+      <div id="editor" class="editor"></div>
+    </aside>
+    <section class="preview-pane">
+      <div class="preview-toolbar">
+        <span id="page-info" class="muted"></span>
+        <div class="tb-spacer"></div>
+        <button class="tb-btn icon" id="zoom-out">−</button>
+        <span id="zoom-label" class="zoom-label"></span>
+        <button class="tb-btn icon" id="zoom-in">+</button>
+        <button class="tb-btn" id="zoom-fit" data-i18n="fitWidth"></button>
+      </div>
+      <div id="preview-scroll" class="preview-scroll">
+        <div id="preview-stage" class="preview-stage">
+          <div id="preview-sheet" class="preview-sheet"></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div id="modal-root"></div>
+  <div id="menu-root"></div>
+  <div id="toast-root" class="toast-root"></div>
+
+  <script src="../node_modules/pdfjs-dist/build/pdf.min.js"></script>
+  <script src="i18n.js"></script>
+  <script src="schema.js"></script>
+  <script src="samples.js"></script>
+  <script src="render.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+{
+  "hosting": {
+    "public": "public",
+    "ignore": ["firebase.json", "**/.*", "downloads/**"],
+    "headers": [
+      { "source": "/latest.json", "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }] },
+      { "source": "/downloads/**", "headers": [{ "key": "Content-Type", "value": "application/octet-stream" }] }
+    ]
+  }
+}
