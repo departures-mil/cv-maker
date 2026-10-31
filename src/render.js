@@ -60,16 +60,19 @@ function buildModel(cv, uiLang) {
   const contacts = [];
   const details = [];
   for (const k of cv.personalOrder) {
+    if (k.startsWith('c:')) {
+      const c = cv.customFields.find((x) => 'c:' + x.id === k);
+      if (!c || c.visible === false || !String(c.value || '').trim()) continue;
+      const label = (c.labels && c.labels[lang]) || c.label || '';
+      details.push({ key: 'custom', label, value: c.value });
+      continue;
+    }
     if (k === 'fullName' || k === 'jobTitle') continue;
     let v = val(k);
     if (!v) continue;
     if (k === 'birthDate') v = f.day(v);
     const entry = { key: k, label: tr(lang, 'field.' + k), value: v };
     (CONTACT_KEYS.includes(k) ? contacts : details).push(entry);
-  }
-  for (const c of cv.customFields) {
-    if (c.visible === false || !String(c.value || '').trim()) continue;
-    details.push({ key: 'custom', label: c.label || '', value: c.value });
   }
 
   const sections = [];

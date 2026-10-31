@@ -3,6 +3,7 @@
 
 const I18N = {
   tr: {
+    day: 'Gün', month: 'Ay', year: 'Yıl', labelTranslations: 'Alan adının çevirileri', labelTranslationsHint: 'CV hangi dilde çıkarsa alan adı o dildeki karşılığıyla yazılır. Boş bırakılan dil için ana ad kullanılır.', 'field.children': 'Çocuk sayısı', updateNotifyTitle: 'CV Maker güncellemesi hazır', updateNotifyBody: '{v} indirilebilir. Güncellemek için tıklayın.', 
     export: 'Dışa aktar', settings: 'Ayarlar', minimize: 'Küçült', close: 'Kapat', toggleFullscreen: 'Tam ekranı aç/kapat',
     undo: 'Geri al', redo: 'Yinele', cvMenu: 'CV işlemleri', tabContent: 'İçerik', tabDesign: 'Tasarım ve şablonlar', fitWidth: 'Sığdır',
     cvNew: 'Yeni CV', cvDuplicate: 'CV\'yi kopyala', cvRename: 'CV\'yi yeniden adlandır', cvImport: 'CV dosyası içe aktar', cvExportFile: 'CV dosyası olarak yedekle',
@@ -57,6 +58,7 @@ const I18N = {
   },
 
   en: {
+    day: 'Day', month: 'Month', year: 'Year', labelTranslations: 'Field name translations', labelTranslationsHint: 'The field name is written in the CV language. If a language is left empty, the main name is used.', 'field.children': 'Number of children', updateNotifyTitle: 'CV Maker update available', updateNotifyBody: '{v} is ready. Click to update.', 
     export: 'Export', settings: 'Settings', minimize: 'Minimize', close: 'Close', toggleFullscreen: 'Toggle full screen',
     undo: 'Undo', redo: 'Redo', cvMenu: 'CV actions', tabContent: 'Content', tabDesign: 'Design & templates', fitWidth: 'Fit',
     cvNew: 'New CV', cvDuplicate: 'Duplicate CV', cvRename: 'Rename CV', cvImport: 'Import CV file', cvExportFile: 'Back up as CV file',
@@ -111,6 +113,7 @@ const I18N = {
   },
 
   ar: {
+    day: 'اليوم', month: 'الشهر', year: 'السنة', labelTranslations: 'ترجمات اسم الحقل', labelTranslationsHint: 'يُكتب اسم الحقل بلغة السيرة الذاتية. إذا تُركت لغة فارغة يُستخدم الاسم الأساسي.', 'field.children': 'عدد الأطفال', updateNotifyTitle: 'يتوفر تحديث لـ CV Maker', updateNotifyBody: '{v} جاهز. انقر للتحديث.', 
     export: 'تصدير', settings: 'الإعدادات', minimize: 'تصغير', close: 'إغلاق', toggleFullscreen: 'تبديل ملء الشاشة',
     undo: 'تراجع', redo: 'إعادة', cvMenu: 'إجراءات السيرة الذاتية', tabContent: 'المحتوى', tabDesign: 'التصميم والقوالب', fitWidth: 'ملاءمة',
     cvNew: 'سيرة ذاتية جديدة', cvDuplicate: 'نسخ السيرة الذاتية', cvRename: 'إعادة تسمية السيرة الذاتية', cvImport: 'استيراد ملف سيرة ذاتية', cvExportFile: 'نسخ احتياطي كملف سيرة ذاتية',
