@@ -19,6 +19,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
+const zlib = require('zlib');
 const { execFileSync } = require('child_process');
 
 const ROOT = path.join(__dirname, '..');
@@ -59,6 +60,30 @@ a{display:inline-block;margin-top:18px;padding:14px 26px;border-radius:10px;back
 </style></head><body><main><h1>CV Maker v${m.displayVersion}</h1>
 <p>Windows · Portable / Taşınabilir / محمول</p>
 <a href="${encodeURI(m.url)}">⬇ ${m.fileName}</a></main></body></html>`;
+}
+
+// Small update bundle: the app's own files + pdf.js (deps like docx/pdf-lib stay in the .exe).
+const BUNDLE_FILES = ['main.js', 'boot.js', 'preload.js', 'package.json', 'update-config.json', 'build/icon.png',
+  'node_modules/pdfjs-dist/build/pdf.min.js', 'node_modules/pdfjs-dist/build/pdf.worker.min.js'];
+const BUNDLE_DIRS = ['lib', 'src'];
+function buildBundle(version) {
+  const files = {};
+  const add = (rel) => { files[rel.split(path.sep).join('/')] = fs.readFileSync(path.join(ROOT, rel)).toString('base64'); };
+  const walk = (rel) => {
+    for (const e of fs.readdirSync(path.join(ROOT, rel), { withFileTypes: true })) {
+      const r = path.join(rel, e.name);
+      if (e.isDirectory()) walk(r); else if (!e.name.endsWith('.map')) add(r);
+    }
+  };
+  BUNDLE_FILES.forEach(add);
+  BUNDLE_DIRS.forEach(walk);
+  const gz = zlib.gzipSync(JSON.stringify({ version, files }), { level: 9 });
+  const name = `app-${version}.json.gz`;
+  const dir = path.join(PUBLIC, 'bundles');
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, name), gz);
+  return { file: `bundles/${name}`, size: gz.length, sha256: crypto.createHash('sha256').update(gz).digest('hex') };
 }
 
 async function waitForAsset(tag, name) {
@@ -105,6 +130,12 @@ async function main() {
     date: new Date().toISOString(),
     notes,
   };
+  const pkg = readPkg();
+  if (pkg.minShell) {
+    const b = buildBundle(version);
+    const baseUrl = JSON.parse(fs.readFileSync(path.join(ROOT, 'update-config.json'), 'utf8')).baseUrl.replace(/\/$/, '');
+    manifest.bundle = { url: `${baseUrl}/${b.file}`, size: b.size, sha256: b.sha256, minShell: pkg.minShell };
+  }
   fs.mkdirSync(PUBLIC, { recursive: true });
   fs.writeFileSync(path.join(PUBLIC, 'latest.json'), JSON.stringify(manifest, null, 2));
   fs.writeFileSync(path.join(PUBLIC, 'index.html'), downloadPage(manifest));

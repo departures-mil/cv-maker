@@ -3,3 +3,4 @@ dist/
 firebase/public/downloads/
 firebase/.firebase/
 *.log
+firebase/public/bundles/

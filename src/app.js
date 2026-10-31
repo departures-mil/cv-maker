@@ -1146,7 +1146,7 @@ async function doUpdate() {
     if (!r.restarted) {
       S.update.state = 'available';
       renderUpdateBanner();
-      toast(t('updateDownloadedManual', { path: file }), 'info', 10000);
+      toast(t('updateDownloadedManual', { path: file.path || file }), 'info', 10000);
     }
   } catch (e) {
     S.update.state = 'error';
