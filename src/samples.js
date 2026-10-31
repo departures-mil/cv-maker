@@ -41,6 +41,7 @@ function buildSample(lang) {
   const x = SAMPLE_TEXT[lang] || SAMPLE_TEXT.tr;
   const cv = newCv(x.cvName);
   for (const k of ['fullName', 'jobTitle', 'email', 'phone', 'address', 'nationality', 'drivingLicense']) cv.personal[k].value = x[k];
+  cv.personal.phone.numbers = [newPhone(x.phone, ['call', 'whatsapp'])];
   const sec = (type) => cv.sections.find((s) => s.type === type);
   sec('summary').items[0].text = x.summary;
   Object.assign(sec('experience').items[0], { position: x.position, company: x.company, location: x.location, start: '2019-03', current: true, description: x.description });

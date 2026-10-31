@@ -12,6 +12,21 @@ const ICONS = {
   github: '<path d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.9-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.34 1.08 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.1.39-1.99 1.03-2.69-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.6 9.6 0 0 1 5 0c1.91-1.3 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.6 1.03 2.69 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.75c0 .26.18.58.69.48A10 10 0 0 0 12 2z" fill="currentColor"/>',
   clip: '<path d="M16.5 6.5 8 15a2.12 2.12 0 0 0 3 3l8.5-8.5a4.24 4.24 0 0 0-6-6L5 12a6.36 6.36 0 0 0 9 9l7-7" fill="none" stroke="currentColor" stroke-width="2"/>',
 };
+/* Small round badges for the ways a number can be reached (white glyph on brand colour). */
+const CHANNEL_COLORS = { call: '#64748b', sms: '#d97706', whatsapp: '#25d366', telegram: '#229ed9', signal: '#3a76f0', viber: '#7360f2' };
+const HANDSET = 'M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25 11.4 11.4 0 0 0 3.6.57 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1z';
+const SMALL_HANDSET = `<path d="${HANDSET}" fill="#fff" transform="translate(7.2 7.2) scale(.4)"/>`;
+const CHANNEL_GLYPHS = {
+  call: `<path d="${HANDSET}" fill="#fff" transform="translate(4.8 4.8) scale(.6)"/>`,
+  sms: '<path d="M5 6h14v9H10l-4 3v-3H5z" fill="none" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/><path d="M8 9.5h8M8 12h5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>',
+  whatsapp: `<path d="M12 4.6a7.4 7.4 0 0 0-6.4 11.1L4.6 19.4l3.8-1a7.4 7.4 0 1 0 3.6-13.8z" fill="none" stroke="#fff" stroke-width="1.7" stroke-linejoin="round"/>${SMALL_HANDSET}`,
+  telegram: '<path d="M18.6 5.6 4.8 11c-.6.2-.6 1 0 1.2l3.4 1.1 1.3 4.2c.2.5.8.6 1.1.2l1.9-1.9 3.6 2.6c.4.3 1 .1 1.1-.4l2.3-10.6c.1-.6-.4-1-.9-.8z" fill="#fff"/><path d="m8.4 13.2 7.4-4.8-5.8 5.6" fill="none" stroke="' + '#229ed9' + '" stroke-width="1.1" stroke-linejoin="round"/>',
+  signal: '<circle cx="12" cy="12" r="6.6" fill="none" stroke="#fff" stroke-width="1.6" stroke-dasharray="2.6 1.5"/><path d="M12 7.6a4.4 4.4 0 0 0-3.8 6.6l-.6 2.2 2.3-.6A4.4 4.4 0 1 0 12 7.6z" fill="#fff"/>',
+  viber: `<path d="M12 4.5c-4 0-7 2-7 6.3 0 2.6 1 4.2 2.6 5.1V19l2.6-2.4c.6.1 1.2.1 1.8.1 4 0 7-2 7-5.9S16 4.5 12 4.5z" fill="none" stroke="#fff" stroke-width="1.7" stroke-linejoin="round"/>${SMALL_HANDSET}`,
+};
+const channelBadge = (c, title) => `<svg class="ch-badge" viewBox="0 0 24 24" role="img" aria-label="${title || c}"><title>${title || c}</title><circle cx="12" cy="12" r="12" fill="${CHANNEL_COLORS[c] || '#64748b'}"/>${CHANNEL_GLYPHS[c] || ''}</svg>`;
+const channelBadges = (apps, lang) => (apps && apps.length ? `<span class="ch-badges">${apps.map((a) => channelBadge(a, tr(lang, 'ch.' + a))).join('')}</span>` : '');
+
 const icon = (k) => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${ICONS[k] || ''}</svg>`;
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -24,6 +39,7 @@ function formatter(lang) {
   const dayFmt = new Intl.DateTimeFormat(loc, { day: 'numeric', month: 'long', year: 'numeric' });
   const f = {
     label: (k) => tr(lang, k),
+    phoneText: (p) => (p.apps && p.apps.length ? `${p.value} (${p.apps.map((a) => tr(lang, 'ch.' + a)).join(lang === 'ar' ? '، ' : ', ')})` : String(p.value || '')),
     month(v) {
       if (!v) return '';
       const [y, m] = String(v).split('-').map(Number);
@@ -68,6 +84,14 @@ function buildModel(cv, uiLang) {
       continue;
     }
     if (k === 'fullName' || k === 'jobTitle') continue;
+    if (k === 'phone') {
+      if (P.phone.visible === false) continue;
+      for (const n of P.phone.numbers || []) {
+        const v = String(n.value || '').trim();
+        if (v) contacts.push({ key: 'phone', label: tr(lang, 'field.phone'), value: v, apps: n.apps || [], text: f.phoneText({ value: v, apps: n.apps }) });
+      }
+      continue;
+    }
     let v = val(k);
     if (!v) continue;
     if (k === 'birthDate') v = f.day(v);
@@ -155,7 +179,10 @@ function sectionHtml(sec, m) {
           </div>
           ${it.date ? `<div class="cv-item-date">${esc(it.date)}</div>` : ''}
         </div>
-        ${it.extra ? `<div class="cv-item-extra">${esc(it.extra)}</div>` : ''}
+        ${it.phones ? [
+          ...it.phones.map((p) => `<div class="cv-item-extra cv-phone">${icon('phone')}<span dir="ltr">${esc(p.value)}</span>${channelBadges(p.apps, m.lang)}</div>`),
+          it.email ? `<div class="cv-item-extra cv-phone">${icon('email')}<span dir="ltr">${esc(it.email)}</span></div>` : '',
+        ].join('') : it.extra ? `<div class="cv-item-extra">${esc(it.extra)}</div>` : ''}
         ${textBlock(it.text)}
         ${it.attached ? `<div class="cv-item-attached">${icon('clip')} ${esc(m.attachedLabel)}</div>` : ''}
       </div>`).join('');
@@ -165,7 +192,7 @@ function sectionHtml(sec, m) {
 
 function contactsHtml(m, cls) {
   if (!m.contacts.length) return '';
-  return `<div class="${cls}">${m.contacts.map((c) => `<span class="cv-contact">${icon(c.key)}<span dir="auto">${esc(c.value)}</span></span>`).join('')}</div>`;
+  return `<div class="${cls}">${m.contacts.map((c) => `<span class="cv-contact">${icon(c.key)}<span dir="ltr">${esc(c.value)}</span>${c.apps ? channelBadges(c.apps, m.lang) : ''}</span>`).join('')}</div>`;
 }
 
 function detailsHtml(m, asSection) {
@@ -296,6 +323,9 @@ const CV_CSS = `
 .cv-contacts.row { flex-wrap: wrap; margin-top: 8px; color: #374151; }
 .cv-contacts.col { flex-direction: column; gap: 6px; }
 .cv-contact { display: inline-flex; align-items: center; gap: 6px; word-break: break-word; }
+.cv .ch-badges { display: inline-flex; gap: 3px; margin-inline-start: 2px; }
+.cv .ch-badge { width: 1.15em; height: 1.15em; flex: none; vertical-align: -0.2em; }
+.cv .cv-phone { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .cv-details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 18px; }
 .cv-detail { display: flex; gap: 6px; }
 .cv-detail .k { color: #6b7280; white-space: nowrap; }

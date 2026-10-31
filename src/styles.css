@@ -245,3 +245,21 @@ kbd { display: inline-block; min-width: 56px; padding: 2px 6px; border: 1px soli
 
 .update-banner .pct { min-width: 150px; font-variant-numeric: tabular-nums; }
 .update-banner .btn.small:not(.primary) { color: var(--text); }
+
+/* phone numbers with channels */
+.prow:has(.phones) { align-items: start; }
+.prow:has(.phones) .prow-label { padding-top: 8px; }
+.phones { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.phone-row { display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--border, #334155); border-radius: 8px; }
+.phone-line { display: flex; gap: 6px; align-items: center; }
+.phone-line .input { flex: 1; min-width: 0; }
+.ch-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ch-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border, #334155); background: transparent; color: inherit; font: inherit; font-size: 12px; cursor: pointer; opacity: .6; }
+.ch-chip:hover { opacity: .9; }
+.ch-chip.on { opacity: 1; font-weight: 600; }
+.ch-chip .ch-dot { width: 10px; height: 10px; border-radius: 50%; background: transparent; border: 2px solid var(--c); }
+.ch-chip.on .ch-dot { background: var(--c); }
+.ch-chip.on { border-color: var(--c); }
+.ch-call { --c: #64748b; } .ch-sms { --c: #d97706; } .ch-whatsapp { --c: #25d366; }
+.ch-telegram { --c: #229ed9; } .ch-signal { --c: #3a76f0; } .ch-viber { --c: #7360f2; }
+.phones > .btn { align-self: flex-start; }
