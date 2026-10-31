@@ -162,7 +162,12 @@ async function boot() {
     S.update.progress = p.total ? p.received / p.total : 0;
     renderUpdateProgress();
   });
-  if (S.settings.autoUpdate) setTimeout(() => checkUpdates(true), 2500);
+  if (S.settings.autoUpdate) {
+    setTimeout(() => checkUpdates(true), 2500);
+    // Keep checking while the program stays open.
+    setInterval(() => { if (S.settings.autoUpdate && ['idle', 'none', 'error'].includes(S.update.state)) checkUpdates(true); }, 30 * 60 * 1000);
+  }
+  api.onNotifyClick(() => { if (S.update.state === 'available') openSettings(); });
   gcAttachments();
 }
 
@@ -579,36 +584,94 @@ function openCropper(src) {
 }
 
 /* personal info */
+
+/* Localized date picker (selects instead of the native control, whose text follows the OS language). */
+function datePicker(value, onChange, { withDay = false, disabled = false } = {}) {
+  const loc = { tr: 'tr-TR', en: 'en-GB', ar: 'ar-u-nu-latn' }[S.settings.uiLang] || 'tr-TR';
+  const [y0, m0, d0] = String(value || '').split('-');
+  const monthName = new Intl.DateTimeFormat(loc, { month: 'long' });
+  const thisYear = new Date().getFullYear();
+  const sel = (cls, opts, cur, ph) => h('select', { class: `input ${cls}`, disabled },
+    h('option', { value: '' }, ph), opts.map(([v, l]) => h('option', { value: v, selected: v === cur }, l)));
+  const day = withDay ? sel('dp-day', Array.from({ length: 31 }, (_, i) => { const v = String(i + 1).padStart(2, '0'); return [v, String(i + 1)]; }), d0, t('day')) : null;
+  const month = sel('dp-month', Array.from({ length: 12 }, (_, i) => [String(i + 1).padStart(2, '0'), monthName.format(new Date(2000, i, 1))]), m0, t('month'));
+  const year = sel('dp-year', Array.from({ length: 80 }, (_, i) => { const v = String(thisYear + 5 - i); return [v, v]; }), y0, t('year'));
+  const emit = () => {
+    const y = year.value, m = month.value, d = day ? day.value : '';
+    let v = '';
+    if (y) v = m ? (withDay && d ? `${y}-${m}-${d}` : `${y}-${m}`) : y;
+    onChange(v);
+  };
+  for (const x of [day, month, year]) if (x) x.onchange = emit;
+  return h('div', { class: `date-picker${withDay ? ' with-day' : ''}` }, day, month, year);
+}
+
+function editCustomLabels(c) {
+  const inputs = {};
+  const body = h('div', null,
+    h('p', { class: 'muted small' }, t('labelTranslationsHint')),
+    ['tr', 'en', 'ar'].map((l) => h('label', { class: 'field' }, h('span', null, t('lang.' + l)),
+      inputs[l] = h('input', { class: 'input', dir: l === 'ar' ? 'rtl' : 'ltr', value: (c.labels && c.labels[l]) || '', placeholder: c.label }))));
+  modal({
+    title: t('labelTranslations'), body,
+    buttons: [
+      { label: t('cancel') },
+      { label: t('save'), kind: 'primary', action: (close) => {
+        c.labels = {};
+        for (const l of Object.keys(inputs)) if (inputs[l].value.trim()) c.labels[l] = inputs[l].value.trim();
+        close(); changed(true);
+      } },
+    ],
+  });
+}
+
 function personalCard() {
   const cv = S.cur;
   const rows = h('div', { class: 'personal-list' });
   for (const k of cv.personalOrder) {
+    if (k.startsWith('c:')) {
+      const c = cv.customFields.find((x) => 'c:' + x.id === k);
+      if (!c) continue;
+      const translated = c.labels && Object.keys(c.labels).length;
+      rows.append(h('div', { class: `prow custom${c.visible === false ? ' is-hidden' : ''}`, 'data-id': k },
+        h('span', { class: 'drag-handle', title: t('dragToMove') }, '⠿'),
+        h('input', { class: 'input prow-label-input', value: c.label, placeholder: t('fieldLabel'), dir: 'auto', oninput: (e) => { c.label = e.target.value; changed(); } }),
+        h('input', { class: 'input', value: c.value, placeholder: t('fieldValue'), dir: 'auto', oninput: (e) => { c.value = e.target.value; changed(); } }),
+        h('span', { class: 'prow-actions' },
+          iconBtn('🌐', t('labelTranslations'), () => editCustomLabels(c), translated ? 'on' : ''),
+          eyeBtn(c.visible !== false, () => { c.visible = c.visible === false; changed(true); }),
+          iconBtn('🗑', t('delete'), () => {
+            cv.customFields = cv.customFields.filter((x) => x !== c);
+            cv.personalOrder = cv.personalOrder.filter((x) => x !== k);
+            changed(true);
+          }, 'danger'))));
+      continue;
+    }
     const def = PERSONAL_FIELDS.find((f) => f.k === k);
     const p = cv.personal[k];
-    const input = h('input', {
-      class: 'input', type: def.type === 'date' ? 'date' : 'text', value: p.value, dir: 'auto',
-      placeholder: t('ph.' + k) !== 'ph.' + k ? t('ph.' + k) : '',
-      oninput: (e) => { p.value = e.target.value; changed(); },
-    });
+    const input = def.type === 'date'
+      ? datePicker(p.value, (v) => { p.value = v; changed(); }, { withDay: true })
+      : h('input', {
+        class: 'input', type: 'text', value: p.value, dir: 'auto',
+        placeholder: t('ph.' + k) !== 'ph.' + k ? t('ph.' + k) : '',
+        oninput: (e) => { p.value = e.target.value; changed(); },
+      });
     rows.append(h('div', { class: `prow${p.visible ? '' : ' is-hidden'}`, 'data-id': k },
       h('span', { class: 'drag-handle', title: t('dragToMove') }, '⠿'),
       h('label', { class: 'prow-label' }, t('field.' + k)),
       input,
-      eyeBtn(p.visible, () => { p.visible = !p.visible; changed(true); })));
+      h('span', { class: 'prow-actions' }, eyeBtn(p.visible, () => { p.visible = !p.visible; changed(true); }))));
   }
   sortable(rows, '.prow', (ids) => { cv.personalOrder = ids; changed(true); });
 
-  const custom = h('div', { class: 'personal-list custom' }, cv.customFields.map((c, i) =>
-    h('div', { class: `prow custom${c.visible === false ? ' is-hidden' : ''}`, 'data-id': c.id },
-      h('span', { class: 'drag-handle', title: t('dragToMove') }, '⠿'),
-      h('input', { class: 'input prow-label-input', value: c.label, placeholder: t('fieldLabel'), dir: 'auto', oninput: (e) => { c.label = e.target.value; changed(); } }),
-      h('input', { class: 'input', value: c.value, placeholder: t('fieldValue'), dir: 'auto', oninput: (e) => { c.value = e.target.value; changed(); } }),
-      eyeBtn(c.visible !== false, () => { c.visible = c.visible === false; changed(true); }),
-      iconBtn('🗑', t('delete'), () => { cv.customFields.splice(i, 1); changed(true); }, 'danger'))));
-  sortable(custom, '.prow', (ids) => { cv.customFields = reorderBy(cv.customFields, ids); changed(true); });
-
-  const body = h('div', null, rows, custom,
-    h('button', { class: 'btn small', onclick: () => { cv.customFields.push({ id: uid(), label: '', value: '', visible: true }); changed(true); } }, '＋ ' + t('addField')),
+  const addField = () => {
+    const c = { id: uid(), label: '', labels: {}, value: '', visible: true };
+    cv.customFields.push(c);
+    cv.personalOrder.push('c:' + c.id);
+    changed(true);
+  };
+  const body = h('div', null, rows,
+    h('button', { class: 'btn small add-field', onclick: addField }, '＋ ' + t('addField')),
     h('p', { class: 'muted small' }, t('personalHint')));
   return card({ id: 'personal', title: t('sec.personal'), icon: '👤', handle: false, body });
 }
@@ -701,11 +764,12 @@ function fieldInput(s, it, f) {
     case 'check':
       return h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: f.k === 'append' ? it[f.k] !== false : !!it[f.k], onchange: (e) => {
         it[f.k] = e.target.checked; changed();
-        if (f.k === 'current') { const end = e.target.closest('.field-grid').querySelector('[data-k="end"]'); if (end) end.disabled = e.target.checked; }
+        if (f.k === 'current') { const end = e.target.closest('.field-grid').querySelector('[data-k="end"]'); if (end) end.querySelectorAll('select').forEach((x) => { x.disabled = e.target.checked; }); }
       } }), t('field.' + f.k));
     case 'month': {
-      const inp = h('input', { class: 'input', type: 'month', value: it[f.k] || '', 'data-k': f.k, disabled: f.k === 'end' && it.current, oninput: (e) => set(e.target.value) });
-      return h('label', { class: 'field' }, h('span', null, label), inp);
+      const dp = datePicker(it[f.k], (v) => set(v), { disabled: f.k === 'end' && it.current });
+      dp.dataset.k = f.k;
+      return h('label', { class: 'field' }, h('span', null, label), dp);
     }
     case 'range': {
       const out = h('b', null, it[f.k] ? `${it[f.k]}/5` : t('levelHidden'));
@@ -901,7 +965,7 @@ async function withBusy(label, fn) {
   const busy = h('div', { class: 'busy' }, h('div', { class: 'busy-box' }, h('div', { class: 'spinner' }), label));
   document.body.append(busy);
   try { return await fn(); }
-  catch (e) { console.error(e); toast(t('exportFailed') + (e && e.message ? `: ${e.message}` : ''), 'err', 6000); }
+  catch (e) { console.error(e); toast(t('exportFailed'), 'err', 6000); }
   finally { busy.remove(); }
 }
 
@@ -1015,6 +1079,11 @@ async function checkUpdates(silent) {
     S.update = { ...S.update, state: silent ? 'idle' : 'error', error: r.error };
   } else if (r.available) {
     S.update = { ...S.update, state: 'available', manifest: r.manifest };
+    const v = `CV Maker v${r.manifest.displayVersion || r.manifest.version}`;
+    if (S.settings.notifiedVersion !== r.manifest.version) {
+      api.notify({ title: t('updateNotifyTitle'), body: t('updateNotifyBody', { v }) });
+      setSetting('notifiedVersion', r.manifest.version);
+    }
   } else {
     S.update = { ...S.update, state: 'none' };
   }

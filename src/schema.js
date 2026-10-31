@@ -14,6 +14,7 @@ const PERSONAL_FIELDS = [
   { k: 'nationality', type: 'text' },
   { k: 'gender', type: 'text' },
   { k: 'maritalStatus', type: 'text' },
+  { k: 'children', type: 'text' },
   { k: 'militaryStatus', type: 'text' },
   { k: 'drivingLicense', type: 'text' },
   { k: 'website', type: 'url' },
@@ -216,9 +217,18 @@ function normalizeCv(cv) {
   cv.photo = Object.assign({ data: '', visible: true }, cv.photo);
   cv.personal = cv.personal || {};
   for (const f of PERSONAL_FIELDS) cv.personal[f.k] = Object.assign({ value: '', visible: true }, cv.personal[f.k]);
-  cv.personalOrder = (cv.personalOrder || []).filter((k) => cv.personal[k]);
-  for (const f of PERSONAL_FIELDS) if (!cv.personalOrder.includes(f.k)) cv.personalOrder.push(f.k);
   cv.customFields = cv.customFields || [];
+  // personalOrder holds built-in keys and custom fields as 'c:<id>' in one list.
+  const customIds = new Set(cv.customFields.map((c) => 'c:' + c.id));
+  cv.personalOrder = (cv.personalOrder || []).filter((k, i, a) => (cv.personal[k] || customIds.has(k)) && a.indexOf(k) === i);
+  for (const f of PERSONAL_FIELDS) {
+    if (cv.personalOrder.includes(f.k)) continue;
+    const prev = PERSONAL_FIELDS[PERSONAL_FIELDS.indexOf(f) - 1];
+    const at = prev ? cv.personalOrder.indexOf(prev.k) : -1;
+    cv.personalOrder.splice(at + 1, 0, f.k);
+  }
+  for (const id of customIds) if (!cv.personalOrder.includes(id)) cv.personalOrder.push(id);
+  for (const c of cv.customFields) c.labels = c.labels || {};
   cv.design = Object.assign({}, base.design, cv.design);
   cv.sections = (cv.sections || []).filter((s) => SECTION_TYPES[s.type]);
   for (const s of cv.sections) {

@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu, Notification } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -27,6 +27,13 @@ if (PORTABLE_DIR) app.setPath('userData', path.join(DATA_DIR, 'chromium'));
 
 const STORE_FILE = path.join(DATA_DIR, 'cvs.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
+
+// Native pieces (dialog buttons, input widgets) follow the chosen interface language.
+try {
+  const uiLang = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')).uiLang;
+  if (['tr', 'en', 'ar'].includes(uiLang)) app.commandLine.appendSwitch('lang', uiLang);
+} catch {}
+if (process.platform === 'win32') app.setAppUserModelId('com.cvmaker.desktop');
 
 let win;
 
@@ -88,6 +95,18 @@ ipcMain.on('window:close', () => win && win.close());
 ipcMain.on('window:toggleFullscreen', () => win && win.setFullScreen(!win.isFullScreen()));
 ipcMain.handle('window:isFullscreen', () => !!(win && win.isFullScreen()));
 ipcMain.on('app:openDataDir', () => shell.openPath(DATA_DIR));
+ipcMain.on('app:notify', (_e, { title, body }) => {
+  if (!Notification.isSupported()) return;
+  const n = new Notification({ title, body, icon: path.join(__dirname, 'build', 'icon.png') });
+  n.on('click', () => {
+    if (!win) return;
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
+    win.webContents.send('app:notifyClick');
+  });
+  n.show();
+});
 
 // ---------- storage ----------
 ipcMain.handle('store:load', () => ({

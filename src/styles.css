@@ -137,8 +137,8 @@ textarea.input { height: auto; resize: vertical; line-height: 1.45; }
 /* personal */
 .personal-list { display: flex; flex-direction: column; gap: 6px; }
 .personal-list.custom { margin: 8px 0; }
-.prow { display: grid; grid-template-columns: 18px 130px 1fr 28px; gap: 8px; align-items: center; }
-.prow.custom { grid-template-columns: 18px 130px 1fr 28px 28px; }
+.prow { display: grid; grid-template-columns: 18px 130px 1fr 92px; gap: 8px; align-items: center; }
+.prow-actions { display: flex; justify-content: flex-end; gap: 4px; }
 .prow.is-hidden .input, .prow.is-hidden .prow-label { opacity: .45; }
 .prow.dragging { opacity: .5; }
 .prow-label { font-size: 13px; font-weight: 600; color: var(--muted); }
@@ -236,3 +236,9 @@ kbd { display: inline-block; min-width: 56px; padding: 2px 6px; border: 1px soli
 
 .advanced { margin-bottom: 6px; }
 .advanced summary { cursor: pointer; color: var(--muted); font-size: 13px; padding: 4px 0; }
+
+.date-picker { display: grid; grid-template-columns: 1.4fr 1fr; gap: 6px; }
+.date-picker.with-day { grid-template-columns: .8fr 1.4fr 1fr; }
+.date-picker .input { padding: 6px 6px; }
+.icon-btn.on { color: var(--primary); }
+.add-field { margin-top: 10px; }
