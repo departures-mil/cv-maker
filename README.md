@@ -25,7 +25,8 @@ npm run build             # dist/CV Maker v<sürüm>.exe
 ```
 
 ## Yeni sürüm yayınlama
-`node scripts/release.js --notes "Değişiklikler"` (dillere göre: `--tr "..." --en "..." --ar "..."`)
+`node scripts/release.js --notes "Değişiklikler"` (dillere göre: `--tr "..." --en "..." --ar "..."`).
+Sürüm GitHub'a gönderilir; GitHub Actions exe'yi derleyip sürüm olarak yayınlar, betik ardından güncelleme bilgisini Firebase'e yükler.
 - sürümü 1.N → 1.(N+1) yükseltir ve `CV Maker v1.(N+1).exe` dosyasını derler,
 - exe'yi GitHub Releases'e (`departures-mil/cv-maker`) yükler (Firebase'in ücretsiz planı exe kabul etmiyor),
 - `firebase/public/latest.json` ve indirme sayfasını Firebase Hosting'e (`cv-maker-d10a0`) yükler.
