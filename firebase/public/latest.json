@@ -1,20 +1,20 @@
 {
-  "version": "1.5.0",
-  "displayVersion": "1.5",
-  "fileName": "CV Maker v1.5.exe",
-  "url": "https://github.com/departures-mil/cv-maker/releases/download/v1.5/CV-Maker-v1.5.exe",
-  "size": 96523724,
-  "sha256": "ee2e872a8baebd4b0f6f0f2ad06948c8d955c62f6ef18f3c3c880a33f62c767e",
-  "date": "2026-11-01T06:24:46.867Z",
+  "version": "1.6.0",
+  "displayVersion": "1.6",
+  "fileName": "CV Maker v1.6.exe",
+  "url": "https://github.com/departures-mil/cv-maker/releases/download/v1.6/CV-Maker-v1.6.exe",
+  "size": 96521005,
+  "sha256": "20b99de90ee912ecb4ba59a83f533591d05fc6afc45294ee7e2a9b042e0cf62b",
+  "date": "2026-11-01T11:25:53.952Z",
   "notes": {
-    "tr": "Güncelleme bildirimleri: Ayarlar'dan açılışta kontrol, program açıkken kontrol sıklığı (5 saniyeden 1 saate kadar) ve Windows bildirimi ayarlanabilir.",
-    "en": "Update notifications: choose in Settings whether to check at startup, how often to check while open (5 seconds to 1 hour) and whether to show a Windows notification.",
-    "ar": "إشعارات التحديث: يمكن من الإعدادات اختيار التحقق عند التشغيل، وتكرار التحقق أثناء فتح البرنامج (من 5 ثوانٍ إلى ساعة)، وإظهار إشعار ويندوز."
+    "tr": "Güncellemeler artık yalnızca program açılışında denetleniyor. Yeni sürüm bildirimi aynı şekilde devam ediyor.",
+    "en": "Updates are now checked only when the program opens. New-version notifications work as before.",
+    "ar": "يتم الآن التحقق من التحديثات عند فتح البرنامج فقط. تستمر إشعارات الإصدار الجديد كما كانت."
   },
   "bundle": {
-    "url": "https://cv-maker-d10a0.web.app/bundles/app-1.5.0.json.gz",
-    "size": 726783,
-    "sha256": "eed32751c8c15b15af461e8b74f744bc53b1fd8b79b6df4c9ca0ece6cb5a794c",
+    "url": "https://cv-maker-d10a0.web.app/bundles/app-1.6.0.json.gz",
+    "size": 725656,
+    "sha256": "3bce00e64bad90ea782200cb556d961cb8f86486c79971f3bd3e1fdafe9156a3",
     "minShell": "1.3.0"
   }
 }
