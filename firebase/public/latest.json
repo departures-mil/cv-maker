@@ -1,20 +1,20 @@
 {
-  "version": "1.4.0",
-  "displayVersion": "1.4",
-  "fileName": "CV Maker v1.4.exe",
-  "url": "https://github.com/departures-mil/cv-maker/releases/download/v1.4/CV-Maker-v1.4.exe",
-  "size": 96519892,
-  "sha256": "8ce5e2689c7e23bff59fe3ce19303823e73750ea8f5dae1811011b9a496914f8",
-  "date": "2026-10-31T18:43:56.449Z",
+  "version": "1.5.0",
+  "displayVersion": "1.5",
+  "fileName": "CV Maker v1.5.exe",
+  "url": "https://github.com/departures-mil/cv-maker/releases/download/v1.5/CV-Maker-v1.5.exe",
+  "size": 96523724,
+  "sha256": "ee2e872a8baebd4b0f6f0f2ad06948c8d955c62f6ef18f3c3c880a33f62c767e",
+  "date": "2026-11-01T06:24:46.867Z",
   "notes": {
-    "tr": "Telefon numaralarına iletişim yolu işaretleri: her numara için Arama, SMS, WhatsApp, Telegram, Signal ve Viber seçilebilir. Kişi ve referanslar için birden çok numara eklenebilir.",
-    "en": "Contact channels for phone numbers: mark each number as reachable by call, SMS, WhatsApp, Telegram, Signal or Viber. Add several numbers for yourself and your references.",
-    "ar": "طرق التواصل لأرقام الهاتف: حدّد لكل رقم الاتصال أو الرسائل أو واتساب أو تيليجرام أو سيجنال أو فايبر. يمكن إضافة عدة أرقام لك وللمراجع."
+    "tr": "Güncelleme bildirimleri: Ayarlar'dan açılışta kontrol, program açıkken kontrol sıklığı (5 saniyeden 1 saate kadar) ve Windows bildirimi ayarlanabilir.",
+    "en": "Update notifications: choose in Settings whether to check at startup, how often to check while open (5 seconds to 1 hour) and whether to show a Windows notification.",
+    "ar": "إشعارات التحديث: يمكن من الإعدادات اختيار التحقق عند التشغيل، وتكرار التحقق أثناء فتح البرنامج (من 5 ثوانٍ إلى ساعة)، وإظهار إشعار ويندوز."
   },
   "bundle": {
-    "url": "https://cv-maker-d10a0.web.app/bundles/app-1.4.0.json.gz",
-    "size": 725087,
-    "sha256": "e173eba5835b0c6aae936e558ce47f2edaf93da5b313a2802babb0417a7013e2",
+    "url": "https://cv-maker-d10a0.web.app/bundles/app-1.5.0.json.gz",
+    "size": 726783,
+    "sha256": "eed32751c8c15b15af461e8b74f744bc53b1fd8b79b6df4c9ca0ece6cb5a794c",
     "minShell": "1.3.0"
   }
 }
