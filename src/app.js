@@ -20,6 +20,8 @@ const DEFAULT_SETTINGS = {
   uiLang: null,
   theme: 'light',
   autoUpdate: true,
+  checkInterval: 5,
+  updateNotify: true,
   openAfterExport: true,
   zoom: 'fit',
   lastCvId: null,
@@ -164,11 +166,8 @@ async function boot() {
     S.update.total = p.total;
     renderUpdateProgress();
   });
-  if (S.settings.autoUpdate) {
-    setTimeout(() => checkUpdates(true), 2500);
-    // Keep checking while the program stays open.
-    setInterval(() => { if (S.settings.autoUpdate && ['idle', 'none', 'error'].includes(S.update.state)) checkUpdates(true); }, 30 * 60 * 1000);
-  }
+  if (S.settings.autoUpdate) setTimeout(() => checkUpdates(true), 1500);
+  scheduleUpdateChecks();
   api.onNotifyClick(() => { if (S.update.state === 'available') openSettings(); });
   gcAttachments();
 }
@@ -1064,6 +1063,9 @@ function openSettings() {
     h('h4', null, t('updates')),
     row(t('currentVersion'), h('b', null, S.info.title)),
     row(t('autoUpdate'), toggle('autoUpdate'), t('autoUpdateHint')),
+    row(t('checkInterval'), h('select', { class: 'input', onchange: (e) => { setSetting('checkInterval', Number(e.target.value)); scheduleUpdateChecks(); } },
+      CHECK_INTERVALS.map((sec) => h('option', { value: sec, selected: Number(st.checkInterval) === sec }, intervalLabel(sec)))), t('checkIntervalHint')),
+    row(t('updateNotify'), toggle('updateNotify'), t('updateNotifyHint')),
     h('div', { id: 'update-panel', class: 'update-panel' }),
     h('details', { class: 'advanced' }, h('summary', null, t('advanced')),
       row(t('updateServer'), h('input', { class: 'input', dir: 'ltr', value: st.updateUrl, placeholder: 'https://….web.app', onchange: (e) => setSetting('updateUrl', e.target.value.trim()) }), t('updateServerHint'))),
@@ -1110,20 +1112,55 @@ function renderUpdateProgress() {
   if (pct) pct.textContent = progressText();
 }
 
+/* Periodic update checks while the program is open; the interval is chosen in Settings. */
+const CHECK_INTERVALS = [0, 5, 10, 30, 60, 300, 900, 1800, 3600];
+let updateTimer = null;
+let checkingNow = false;
+const notifiedThisRun = new Set();
+function scheduleUpdateChecks() {
+  clearInterval(updateTimer);
+  updateTimer = null;
+  const sec = Number(S.settings.checkInterval) || 0;
+  if (sec > 0) {
+    updateTimer = setInterval(() => {
+      if (!checkingNow && ['idle', 'none', 'error', 'available'].includes(S.update.state)) checkUpdates(true);
+    }, sec * 1000);
+  }
+}
+function intervalLabel(sec) {
+  if (!sec) return t('intervalOff');
+  // Arabic counts above ten take the singular noun, so those use the "Many" wording.
+  if (sec < 60) return t(sec > 10 ? 'everySecondsMany' : 'everySeconds', { n: sec });
+  if (sec === 60) return t('everyMinute');
+  if (sec < 3600) return t(sec / 60 > 10 ? 'everyMinutesMany' : 'everyMinutes', { n: sec / 60 });
+  return sec === 3600 ? t('everyHour') : t('everyHours', { n: sec / 3600 });
+}
+
 async function checkUpdates(silent) {
-  S.update.state = 'checking';
-  renderUpdatePanel();
-  const r = await api.checkUpdate(S.settings.updateUrl);
+  if (checkingNow) return;
+  checkingNow = true;
+  // Background checks stay invisible unless something new is found.
+  if (!silent) { S.update.state = 'checking'; renderUpdatePanel(); }
+  const prev = S.update.manifest && S.update.manifest.version;
+  let r;
+  try { r = await api.checkUpdate(S.settings.updateUrl); } catch (e) { r = { ok: false, error: e.message }; }
+  checkingNow = false;
+  if (S.update.state === 'downloading' || S.update.state === 'ready') return;
   if (!r.ok) {
+    if (silent && S.update.state === 'available') return;
     S.update = { ...S.update, state: silent ? 'idle' : 'error', error: r.error };
   } else if (r.available) {
+    const isNew = prev !== r.manifest.version;
     S.update = { ...S.update, state: 'available', manifest: r.manifest };
     const v = `CV Maker v${r.manifest.displayVersion || r.manifest.version}`;
-    if (S.settings.notifiedVersion !== r.manifest.version) {
+    // Notify once per version every time the program runs, until it is installed.
+    if (S.settings.updateNotify !== false && !notifiedThisRun.has(r.manifest.version)) {
+      notifiedThisRun.add(r.manifest.version);
       api.notify({ title: t('updateNotifyTitle'), body: t('updateNotifyBody', { v }) });
-      setSetting('notifiedVersion', r.manifest.version);
     }
+    if (silent && !isNew) return;
   } else {
+    if (silent && S.update.state === 'none') return;
     S.update = { ...S.update, state: 'none' };
   }
   renderUpdatePanel();
