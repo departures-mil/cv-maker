@@ -20,7 +20,6 @@ const DEFAULT_SETTINGS = {
   uiLang: null,
   theme: 'light',
   autoUpdate: true,
-  checkInterval: 5,
   updateNotify: true,
   openAfterExport: true,
   zoom: 'fit',
@@ -166,8 +165,8 @@ async function boot() {
     S.update.total = p.total;
     renderUpdateProgress();
   });
+  // Updates are looked for once, when the program opens.
   if (S.settings.autoUpdate) setTimeout(() => checkUpdates(true), 1500);
-  scheduleUpdateChecks();
   api.onNotifyClick(() => { if (S.update.state === 'available') openSettings(); });
   gcAttachments();
 }
@@ -1063,8 +1062,6 @@ function openSettings() {
     h('h4', null, t('updates')),
     row(t('currentVersion'), h('b', null, S.info.title)),
     row(t('autoUpdate'), toggle('autoUpdate'), t('autoUpdateHint')),
-    row(t('checkInterval'), h('select', { class: 'input', onchange: (e) => { setSetting('checkInterval', Number(e.target.value)); scheduleUpdateChecks(); } },
-      CHECK_INTERVALS.map((sec) => h('option', { value: sec, selected: Number(st.checkInterval) === sec }, intervalLabel(sec)))), t('checkIntervalHint')),
     row(t('updateNotify'), toggle('updateNotify'), t('updateNotifyHint')),
     h('div', { id: 'update-panel', class: 'update-panel' }),
     h('details', { class: 'advanced' }, h('summary', null, t('advanced')),
@@ -1112,29 +1109,8 @@ function renderUpdateProgress() {
   if (pct) pct.textContent = progressText();
 }
 
-/* Periodic update checks while the program is open; the interval is chosen in Settings. */
-const CHECK_INTERVALS = [0, 5, 10, 30, 60, 300, 900, 1800, 3600];
-let updateTimer = null;
 let checkingNow = false;
 const notifiedThisRun = new Set();
-function scheduleUpdateChecks() {
-  clearInterval(updateTimer);
-  updateTimer = null;
-  const sec = Number(S.settings.checkInterval) || 0;
-  if (sec > 0) {
-    updateTimer = setInterval(() => {
-      if (!checkingNow && ['idle', 'none', 'error', 'available'].includes(S.update.state)) checkUpdates(true);
-    }, sec * 1000);
-  }
-}
-function intervalLabel(sec) {
-  if (!sec) return t('intervalOff');
-  // Arabic counts above ten take the singular noun, so those use the "Many" wording.
-  if (sec < 60) return t(sec > 10 ? 'everySecondsMany' : 'everySeconds', { n: sec });
-  if (sec === 60) return t('everyMinute');
-  if (sec < 3600) return t(sec / 60 > 10 ? 'everyMinutesMany' : 'everyMinutes', { n: sec / 60 });
-  return sec === 3600 ? t('everyHour') : t('everyHours', { n: sec / 3600 });
-}
 
 async function checkUpdates(silent) {
   if (checkingNow) return;
