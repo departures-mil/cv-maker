@@ -1,5 +1,5 @@
-Güncelleme bildirimleri: Ayarlar'dan açılışta kontrol, program açıkken kontrol sıklığı (5 saniyeden 1 saate kadar) ve Windows bildirimi ayarlanabilir.
+Güncellemeler artık yalnızca program açılışında denetleniyor. Yeni sürüm bildirimi aynı şekilde devam ediyor.
 
-Update notifications: choose in Settings whether to check at startup, how often to check while open (5 seconds to 1 hour) and whether to show a Windows notification.
+Updates are now checked only when the program opens. New-version notifications work as before.
 
-إشعارات التحديث: يمكن من الإعدادات اختيار التحقق عند التشغيل، وتكرار التحقق أثناء فتح البرنامج (من 5 ثوانٍ إلى ساعة)، وإظهار إشعار ويندوز.
+يتم الآن التحقق من التحديثات عند فتح البرنامج فقط. تستمر إشعارات الإصدار الجديد كما كانت.
