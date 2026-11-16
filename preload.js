@@ -9,6 +9,11 @@ contextBridge.exposeInMainWorld('api', {
   isFullscreen: () => ipcRenderer.invoke('window:isFullscreen'),
   onFullscreen: (cb) => ipcRenderer.on('window:fullscreen', (_e, v) => cb(v)),
   openDataDir: () => ipcRenderer.send('app:openDataDir'),
+  listBackups: () => ipcRenderer.invoke('backup:list'),
+  createBackup: () => ipcRenderer.invoke('backup:create'),
+  restoreBackup: (name) => ipcRenderer.invoke('backup:restore', name),
+  openBackupDir: () => ipcRenderer.send('backup:openFolder'),
+  importLegacy: (o) => ipcRenderer.invoke('data:importLegacy', o),
 
   load: () => ipcRenderer.invoke('store:load'),
   saveCvs: (d) => ipcRenderer.invoke('store:saveCvs', d),

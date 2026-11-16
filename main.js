@@ -8,6 +8,7 @@ const { spawn } = require('child_process');
 const { buildPdf } = require('./lib/pdf');
 const { buildDocx } = require('./lib/docx');
 const updater = require('./lib/updater');
+const { DataStore } = require('./lib/datastore');
 
 const APP_NAME = 'CV Maker';
 // Version of the code that is running (an update bundle can be newer than the .exe).
@@ -19,35 +20,50 @@ const TITLE = `${APP_NAME} v${DISPLAY_VERSION}`;
 
 app.setName(APP_NAME);
 
-// Portable: keep all data next to the .exe so it travels with it.
+// Installed edition (setup): data lives in %APPDATA%\CV Maker\data.
+// The old portable edition kept it next to the .exe ("CV Maker Data"); it is still supported
+// so that a portable copy can move itself over to the installed edition (see update:apply).
 const PORTABLE_DIR = process.env.PORTABLE_EXECUTABLE_DIR;
+const INSTALLED_USERDATA = path.join(app.getPath('appData'), APP_NAME);
+const MIGRATE_FILE = path.join(INSTALLED_USERDATA, 'migrate-from.json');
 const DATA_DIR = PORTABLE_DIR
   ? path.join(PORTABLE_DIR, 'CV Maker Data')
   : path.join(app.getPath('userData'), 'data');
-const ATTACH_DIR = path.join(DATA_DIR, 'attachments');
-fs.mkdirSync(ATTACH_DIR, { recursive: true });
 if (PORTABLE_DIR) app.setPath('userData', path.join(DATA_DIR, 'chromium'));
+const store = new DataStore(DATA_DIR);
+const ATTACH_DIR = store.attachDir;
 
-const STORE_FILE = path.join(DATA_DIR, 'cvs.json');
-const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
+function updateLog(line) {
+  try { fs.appendFileSync(path.join(DATA_DIR, 'update.log'), `${new Date().toISOString()} ${line}\n`); } catch {}
+}
+
+// First start of the installed edition: bring over the records of the portable edition.
+let MIGRATION = null;
+if (!PORTABLE_DIR) {
+  try {
+    const marker = JSON.parse(fs.readFileSync(MIGRATE_FILE, 'utf8'));
+    const src = marker && marker.dataDir;
+    const done = store.importedSources().includes(path.resolve(src || '').toLowerCase());
+    if (src && !done && DataStore.isDataDir(src)) {
+      MIGRATION = store.importLegacy(src);
+      updateLog(`imported portable data from ${src}: ${JSON.stringify(MIGRATION)}`);
+    }
+    fs.renameSync(MIGRATE_FILE, MIGRATE_FILE.replace(/\.json$/, `.done-${Date.now()}.json`));
+  } catch (e) {
+    if (e.code !== 'ENOENT') updateLog('portable import failed: ' + (e.stack || e.message));
+  }
+}
+try { store.dailyBackup(); } catch (e) { updateLog('daily backup failed: ' + e.message); }
 
 // Native pieces (dialog buttons, input widgets) follow the chosen interface language.
 try {
-  const uiLang = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')).uiLang;
+  const uiLang = store.loadSettings().uiLang;
   if (['tr', 'en', 'ar'].includes(uiLang)) app.commandLine.appendSwitch('lang', uiLang);
 } catch {}
 if (process.platform === 'win32') app.setAppUserModelId('com.cvmaker.desktop');
 
 let win;
 
-function readJson(file, fallback) {
-  try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return fallback; }
-}
-function writeJsonAtomic(file, data) {
-  const tmp = file + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(data));
-  fs.renameSync(tmp, file);
-}
 
 function createWindow() {
   win = new BrowserWindow({
@@ -79,10 +95,6 @@ function createWindow() {
   win.on('enter-full-screen', () => win.webContents.send('window:fullscreen', true));
   win.on('leave-full-screen', () => win.webContents.send('window:fullscreen', false));
   win.loadFile(path.join(__dirname, 'src', 'index.html'));
-}
-
-function updateLog(line) {
-  try { fs.appendFileSync(path.join(DATA_DIR, 'update.log'), `${new Date().toISOString()} ${line}\n`); } catch {}
 }
 
 // After a one-click update the new .exe is started with --cleanup-old=<previous exe>.
@@ -123,6 +135,9 @@ ipcMain.handle('app:info', () => ({
   title: TITLE,
   portable: !!PORTABLE_DIR,
   dataDir: DATA_DIR,
+  backupDir: store.backupDir,
+  afterUpdate,
+  migration: MIGRATION,
   platform: process.platform,
 }));
 ipcMain.on('window:minimize', () => win && win.minimize());
@@ -144,14 +159,32 @@ ipcMain.on('app:notify', (_e, { title, body }) => {
 });
 
 // ---------- storage ----------
-ipcMain.handle('store:load', () => ({
-  cvs: readJson(STORE_FILE, null),
-  settings: readJson(SETTINGS_FILE, null),
-}));
-ipcMain.handle('store:saveCvs', (_e, data) => { writeJsonAtomic(STORE_FILE, data); return true; });
-ipcMain.handle('store:saveSettings', (_e, data) => { writeJsonAtomic(SETTINGS_FILE, data); return true; });
-ipcMain.on('store:saveCvsSync', (e, data) => { try { writeJsonAtomic(STORE_FILE, data); } catch {} e.returnValue = true; });
-ipcMain.on('store:saveSettingsSync', (e, data) => { try { writeJsonAtomic(SETTINGS_FILE, data); } catch {} e.returnValue = true; });
+ipcMain.handle('store:load', () => ({ cvs: store.loadCvs(), settings: store.loadSettings() }));
+ipcMain.handle('store:saveCvs', (_e, data) => { store.saveCvs(data); return true; });
+ipcMain.handle('store:saveSettings', (_e, data) => { store.saveSettings(data); return true; });
+ipcMain.on('store:saveCvsSync', (e, data) => { try { store.saveCvs(data); } catch {} e.returnValue = true; });
+ipcMain.on('store:saveSettingsSync', (e, data) => { try { store.saveSettings(data); } catch {} e.returnValue = true; });
+
+// ---------- backups / import of old data ----------
+ipcMain.handle('backup:list', () => store.listBackups());
+ipcMain.handle('backup:create', () => store.backup('manual'));
+ipcMain.handle('backup:restore', (_e, name) => {
+  const r = store.restoreBackup(name);
+  updateLog(`restored backup ${name} (safety copy ${r.safety})`);
+  return r;
+});
+ipcMain.on('backup:openFolder', () => shell.openPath(store.backupDir));
+ipcMain.handle('data:importLegacy', async (_e, { title }) => {
+  const r = await dialog.showOpenDialog(win, { title, properties: ['openDirectory'] });
+  if (r.canceled) return null;
+  let dir = r.filePaths[0];
+  // Accept both the "CV Maker Data" folder and the folder that contains it.
+  if (!DataStore.isDataDir(dir) && DataStore.isDataDir(path.join(dir, 'CV Maker Data'))) dir = path.join(dir, 'CV Maker Data');
+  if (!DataStore.isDataDir(dir)) return { ok: false, error: 'not-data-dir' };
+  const res = store.importLegacy(dir);
+  updateLog(`manual import from ${dir}: ${JSON.stringify(res)}`);
+  return { ok: true, ...res };
+});
 ipcMain.handle('file:saveText', async (_e, { title, defaultName, ext, text }) => {
   const r = await dialog.showSaveDialog(win, { title, defaultPath: defaultName, filters: [{ name: ext, extensions: [ext] }] });
   if (r.canceled) return false;
@@ -188,15 +221,13 @@ ipcMain.handle('attach:read', (_e, fileId) => {
   return `data:${MIME[ext]};base64,${fs.readFileSync(p).toString('base64')}`;
 });
 ipcMain.handle('attach:remove', (_e, fileId) => {
-  try { fs.unlinkSync(safeAttachPath(fileId)); } catch {}
+  // Kept until the next start: undo may still need it. gc then moves it into backups.
+  safeAttachPath(fileId);
   return true;
 });
 ipcMain.handle('attach:open', (_e, fileId) => shell.openPath(safeAttachPath(fileId)));
-ipcMain.handle('attach:gc', (_e, usedIds) => {
-  const used = new Set(usedIds);
-  for (const f of fs.readdirSync(ATTACH_DIR)) if (!used.has(f)) { try { fs.unlinkSync(path.join(ATTACH_DIR, f)); } catch {} }
-  return true;
-});
+// Unused attachments are moved into backups/attachments-removed, never deleted.
+ipcMain.handle('attach:gc', (_e, usedIds) => { store.gcAttachments(usedIds); return true; });
 
 // ---------- import / export ----------
 ipcMain.handle('cv:export', async (_e, { cv, defaultName, title }) => {
@@ -277,16 +308,24 @@ ipcMain.handle('jpeg:save', (_e, { target, images, open }) => {
 });
 
 // ---------- updates ----------
-// Two kinds of update:
-//  * bundle: only the app's own files (~1 MB), unpacked into CV Maker Data/app/<version>
-//    and picked up by boot.js on the next start. Used when this .exe is new enough.
-//  * exe: the full portable .exe (~100 MB) for older .exe versions or dependency changes.
+// Kinds of update (all announced in latest.json of the newest GitHub release, see update-config.json):
+//  * bundle:    only the app's own files (~1 MB), unpacked into <data>/app/<version>
+//               and picked up by boot.js on the next start.
+//  * installer: the full setup ("CV Maker Setup x.y.exe"), run silently; used when the
+//               Electron shell itself changes (manifest.bundle.minShell newer than this shell).
+//  * portable -> installed: a portable copy downloads the setup, leaves a note where its
+//               data is, installs and the installed edition imports the data on first start.
 const BUNDLE_ROOT = path.join(DATA_DIR, 'app');
 function canUseBundle(m) {
+  if (PORTABLE_DIR && m && m.installer) return false; // portable copies move to the installed edition
   return !!(m && m.bundle && m.bundle.url && fs.existsSync(path.join(global.__CVM_BASE || __dirname, 'boot.js'))
     && updater.cmp(SHELL_VERSION, m.bundle.minShell || '999') >= 0);
 }
-ipcMain.handle('update:check', (_e, override) => updater.check(APP_VERSION, override));
+ipcMain.handle('update:check', async (_e, override) => {
+  const r = await updater.check(APP_VERSION, override);
+  if (r.ok && PORTABLE_DIR && r.manifest && r.manifest.installer) { r.available = true; r.migrate = true; }
+  return r;
+});
 ipcMain.handle('update:download', async (_e, manifest) => {
   const progress = (p) => win && win.webContents.send('update:progress', p);
   if (canUseBundle(manifest)) {
@@ -295,8 +334,15 @@ ipcMain.handle('update:download', async (_e, manifest) => {
       updateLog(`bundle ${manifest.version} unpacked to ${dir}`);
       return { kind: 'bundle', version: manifest.version, path: dir };
     } catch (e) {
-      updateLog('bundle failed, falling back to exe: ' + e.message);
+      updateLog('bundle failed, falling back to installer: ' + e.message);
     }
+  }
+  if (manifest.installer) {
+    const dir = path.join(os.tmpdir(), 'cvmaker-update');
+    fs.mkdirSync(dir, { recursive: true });
+    const file = await updater.download(manifest.installer, dir, progress);
+    updateLog(`installer ${manifest.version} downloaded to ${file}`);
+    return { kind: 'installer', version: manifest.version, path: file, migrate: !!PORTABLE_DIR };
   }
   const targetDir = PORTABLE_DIR || app.getPath('downloads');
   return updater.download(manifest, targetDir, progress);
@@ -311,8 +357,9 @@ function restartSelf(extraArgs) {
   setTimeout(() => app.exit(0), 400);
 }
 ipcMain.handle('update:apply', (_e, target) => {
+  try { store.backup('before-update', { to: target && target.version }); } catch (e) { updateLog('backup before update failed: ' + e.message); }
   if (target && typeof target === 'object' && target.kind === 'bundle') {
-    // Keep the .exe name in step with the version shown in the title ("CV Maker v1.4.exe").
+    // Portable only: keep the .exe name in step with the version shown in the title.
     const oldExe = process.env.PORTABLE_EXECUTABLE_FILE;
     if (oldExe) {
       const [ma, mi] = String(target.version).split('.');
@@ -326,13 +373,34 @@ ipcMain.handle('update:apply', (_e, target) => {
     try { restartSelf(['--after-update']); } catch (e) { updateLog('restart failed: ' + e.message); return { restarted: false, error: e.message }; }
     return { restarted: true };
   }
+  if (target && typeof target === 'object' && target.kind === 'installer') {
+    if (process.platform !== 'win32') { shell.showItemInFolder(target.path); return { restarted: false }; }
+    const args = ['/S', '--force-run'];
+    if (PORTABLE_DIR) {
+      // Tell the installed edition where the records are. The portable folder itself is left untouched.
+      try {
+        fs.mkdirSync(INSTALLED_USERDATA, { recursive: true });
+        fs.writeFileSync(MIGRATE_FILE, JSON.stringify({ dataDir: DATA_DIR, exe: process.env.PORTABLE_EXECUTABLE_FILE, date: new Date().toISOString() }));
+      } catch (e) { updateLog('could not write migrate note: ' + e.message); return { restarted: false, error: e.message }; }
+    } else args.unshift('--updated');
+    updateLog(`run installer ${target.path} ${args.join(' ')}`);
+    try {
+      spawn(target.path, args, { detached: true, stdio: 'ignore', cwd: path.dirname(target.path) }).unref();
+    } catch (e) {
+      updateLog('installer spawn failed: ' + e.message);
+      shell.showItemInFolder(target.path);
+      return { restarted: false, error: e.message };
+    }
+    setTimeout(() => app.exit(0), 400);
+    return { restarted: true };
+  }
+  // Legacy: a downloaded portable .exe.
   const newExePath = typeof target === 'string' ? target : target && target.path;
   const oldExe = process.env.PORTABLE_EXECUTABLE_FILE;
   if (process.platform !== 'win32' || !oldExe) {
     shell.showItemInFolder(newExePath);
     return { restarted: false };
   }
-  // Start the new version directly; it deletes the old .exe once this one has exited.
   updateLog(`apply: ${oldExe} -> ${newExePath}`);
   try {
     spawn(newExePath, [`--cleanup-old=${oldExe}`], { detached: true, stdio: 'ignore', cwd: path.dirname(newExePath) }).unref();
@@ -346,7 +414,7 @@ ipcMain.handle('update:apply', (_e, target) => {
 });
 ipcMain.on('update:openUrl', (_e, url) => { if (/^https:\/\//.test(url)) shell.openExternal(url); });
 
-// A full .exe update makes older unpacked bundles obsolete.
+// Older unpacked bundles (not the running one) are obsolete; installer leftovers too.
 setTimeout(() => {
   try {
     for (const d of fs.readdirSync(BUNDLE_ROOT)) {
@@ -355,4 +423,5 @@ setTimeout(() => {
       if (full !== global.__CVM_BUNDLE && updater.cmp(d, APP_VERSION) <= 0) fs.rmSync(full, { recursive: true, force: true });
     }
   } catch {}
+  try { if (!PORTABLE_DIR) fs.rmSync(path.join(os.tmpdir(), 'cvmaker-update'), { recursive: true, force: true }); } catch {}
 }, 15000);

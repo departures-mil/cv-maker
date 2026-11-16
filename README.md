@@ -1,38 +1,30 @@
 # CV Maker
 
-Windows için taşınabilir (kurulumsuz) CV hazırlama programı. Electron ile yazıldı.
+Windows için CV hazırlama programı (Electron). Kurulumlu sürüm: `CV-Maker-Setup-<sürüm>.exe`.
 
-## Özellikler
-- Her açılışta tam ekran (F11 ile geçiş), arayüz Türkçe / English / العربية (Arapça'da sağdan sola).
-- CV dili ayrı seçilebilir (başlıklar ve tarihler o dilde yazılır).
-- Vesikalık fotoğraf (3:4 kırpma, döndürme, yakınlaştırma).
-- Kişisel bilgiler: her alan gizlenebilir, sürükle-bırak ile sıralanabilir, özel alan eklenebilir.
-- 15 bölüm türü (Hakkımda, İş Deneyimi, Eğitim, Yetenekler, Diller, Sertifikalar, Kurslar, Projeler,
-  Ödüller, Yayınlar, Gönüllülük, Referanslar, Hobiler, Özel bölüm, Belgeler). Her bölüm ve her öğe
-  eklenebilir, silinebilir, gizlenebilir, çoğaltılabilir, yukarı/aşağı veya sürükle-bırak ile taşınabilir.
-- Belgeler bölümü: diploma, onur belgesi vb. PDF/resim dosyaları; PDF çıktısının sonuna sayfa olarak eklenir.
-- 6 hazır şablon + "Şablon olarak kaydet" ile sınırsız özel şablon, .cvtemplate olarak içe/dışa aktarma.
-- Çıktı: PDF, Word (DOCX), JPEG (her sayfa bir resim).
-- Birden fazla CV, .cvmaker dosyası olarak yedekleme / geri yükleme, geri al / yinele.
-- Veriler programın yanındaki `CV Maker Data` klasöründe tutulur.
-- Ayarlar > Güncellemeler: Firebase Hosting'den tek tuşla güncelleme; yeni dosya adı `CV Maker v1.X.exe`.
+## Veriler ve yedekler
+- Veriler: `%APPDATA%\CV Maker\data` (cvs.json, settings.json, attachments).
+- Yedekler: `data\backups\` — her günün ilk açılışında, her güncellemeden, geri yüklemeden ve içe aktarmadan
+  önce otomatik alınır, hiçbiri silinmez. Kullanılmayan ekler `backups\attachments-removed\` içine taşınır.
+- Ayarlar > Veriler: yedek listesi, geri yükleme, eski taşınabilir sürümün "CV Maker Data" klasörünü içe aktarma.
+- Taşınabilir sürümden (v1.x) gelenler: v2.0 güncellemesi kurulumu indirir, kurar; kurulan program açılışta
+  eski kayıtları birleştirir. Eski klasör olduğu gibi kalır (`data\backups\legacy-portable_*` içinde de kopyası var).
+
+## Güncellemeler
+Program açılışta `https://github.com/departures-mil/cv-maker/releases/latest/download/latest.json` dosyasını okur.
+Yeni sürüm varsa bildirim gelir, üstte "Şimdi güncelle" çıkar.
+- Küçük güncelleme (bundle, ~150 KB): yalnızca programın kendi dosyaları; `data\app\<sürüm>` içine açılır.
+- Tam güncelleme (kurulum): Electron veya npm paketleri değişince. `package.json > cvmaker.minShell` yeni
+  sürüme yükseltilir; eski kurulumlar o zaman kurulum dosyasını indirip sessizce kurar.
+
+## Yeni sürüm yayınlama
+1. Kodu değiştir, `package.json` sürümünü yükselt (ör. 2.0.0 → 2.1.0), `release-notes.json`'a notları yaz.
+2. `main` dalına gönder. GitHub Actions (Windows) test eder, kurulumu ve bundle'ı derler, `v<sürüm>` olarak yayınlar.
 
 ## Geliştirme
 ```
 npm install
-npm start                 # geliştirme modunda çalıştır
-npm run build             # dist/CV Maker v<sürüm>.exe
+npm start
+npm test
+node scripts/release.js --no-installer   # yalnızca bundle + latest.json (dist/release)
 ```
-
-## Yeni sürüm yayınlama
-`node scripts/release.js --notes "Değişiklikler"` (dillere göre: `--tr "..." --en "..." --ar "..."`).
-Sürüm GitHub'a gönderilir; GitHub Actions exe'yi derleyip sürüm olarak yayınlar, betik ardından güncelleme bilgisini Firebase'e yükler.
-- sürümü 1.N → 1.(N+1) yükseltir ve `CV Maker v1.(N+1).exe` dosyasını derler,
-- exe'yi GitHub Releases'e (`departures-mil/cv-maker`) yükler (Firebase'in ücretsiz planı exe kabul etmiyor),
-- `firebase/public/latest.json` ve indirme sayfasını Firebase Hosting'e (`cv-maker-d10a0`) yükler.
-
-Gerekenler: `gh` (depoya yazma izni) ve Google kimlik bilgisi (`GOOGLE_APPLICATION_CREDENTIALS`,
-`FIREBASE_SERVICE_ACCOUNT` veya `gcloud auth application-default login`).
-
-Program açılışta `https://cv-maker-d10a0.web.app/latest.json` dosyasını okur; yeni sürüm varsa üstte
-"Şimdi güncelle" düğmesi çıkar. Düğme yeni exe'yi eskisinin yanına indirir, eskisini siler ve yeni sürümü açar.

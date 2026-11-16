@@ -75,14 +75,36 @@ function toast(msg, kind = 'info', ms = 3200) {
 
 /* ---------- persistence ---------- */
 
+// Set while the data on disk is being replaced (backup restore / import) so that
+// nothing in memory is written over it.
+let saveLocked = false;
 const persistCvs = debounce(() => {
-  api.saveCvs({ version: 1, cvs: S.cvs });
+  if (!saveLocked) api.saveCvs({ version: 1, cvs: S.cvs });
 }, 400);
 window.addEventListener('beforeunload', () => {
+  if (saveLocked) return;
   api.saveCvsSync({ version: 1, cvs: S.cvs });
   api.saveSettingsSync(S.settings);
 });
-const persistSettings = debounce(() => api.saveSettings(S.settings), 200);
+const persistSettings = debounce(() => { if (!saveLocked) api.saveSettings(S.settings); }, 200);
+
+/** Writes everything now, blocks further writes and reloads the window after fn() changed the files. */
+async function replaceDataAndReload(fn) {
+  persistCvs.flush();
+  persistSettings.flush();
+  api.saveCvsSync({ version: 1, cvs: S.cvs });
+  api.saveSettingsSync(S.settings);
+  saveLocked = true;
+  try {
+    const r = await fn();
+    if (r === false) { saveLocked = false; return r; }
+    location.reload();
+    return r;
+  } catch (e) {
+    saveLocked = false;
+    throw e;
+  }
+}
 
 function setSetting(k, v) { S.settings[k] = v; persistSettings(); }
 
@@ -166,7 +188,13 @@ async function boot() {
     renderUpdateProgress();
   });
   // Updates are looked for once, when the program opens.
-  if (S.settings.autoUpdate) setTimeout(() => checkUpdates(true), 1500);
+  // A portable copy that just updated itself continues straight to the installed edition.
+  if (S.info.portable && S.info.afterUpdate) setTimeout(() => checkUpdates(true, true), 800);
+  else if (S.settings.autoUpdate) setTimeout(() => checkUpdates(true), 1500);
+  if (S.info.migration) {
+    const mg = S.info.migration;
+    setTimeout(() => toast(t('migrated', { n: mg.total, added: mg.added + mg.updated }), 'ok', 9000), 1200);
+  }
   api.onNotifyClick(() => { if (S.update.state === 'available') openSettings(); });
   gcAttachments();
 }
@@ -1065,17 +1093,64 @@ function openSettings() {
     row(t('updateNotify'), toggle('updateNotify'), t('updateNotifyHint')),
     h('div', { id: 'update-panel', class: 'update-panel' }),
     h('details', { class: 'advanced' }, h('summary', null, t('advanced')),
-      row(t('updateServer'), h('input', { class: 'input', dir: 'ltr', value: st.updateUrl, placeholder: 'https://….web.app', onchange: (e) => setSetting('updateUrl', e.target.value.trim()) }), t('updateServerHint'))),
+      row(t('updateServer'), h('input', { class: 'input', dir: 'ltr', value: st.updateUrl, placeholder: 'https://…', onchange: (e) => setSetting('updateUrl', e.target.value.trim()) }), t('updateServerHint'))),
 
     h('h4', null, t('data')),
     row(t('dataFolder'), h('button', { class: 'btn', onclick: () => api.openDataDir() }, t('openFolder')), S.info.dataDir),
+    row(t('backups'), h('div', { class: 'row-btns' },
+      h('button', { class: 'btn', onclick: async () => { persistCvs.flush(); api.saveCvsSync({ version: 1, cvs: S.cvs }); await api.createBackup(); toast(t('backupDone'), 'ok'); renderBackupList(); } }, t('backupNow')),
+      h('button', { class: 'btn', onclick: () => api.openBackupDir() }, t('openFolder'))), t('backupsHint')),
+    h('div', { id: 'backup-list', class: 'backup-list' }),
+    row(t('importOld'), h('button', { class: 'btn', onclick: importOldData }, t('importOldBtn')), t('importOldHint')),
 
     h('h4', null, t('shortcuts')),
     h('div', { class: 'shortcuts' }, [['Ctrl+Z', t('undo')], ['Ctrl+Y', t('redo')], ['Ctrl+P', t('exportPdf')], ['F11', t('toggleFullscreen')]].map(([k, v]) =>
       h('div', null, h('kbd', null, k), ' ', v))),
-    h('p', { class: 'muted small about' }, `${S.info.title} · ${t('portableNote')}`));
+    h('p', { class: 'muted small about' }, `${S.info.title} · ${t(S.info.portable ? 'portableNote' : 'installedNote')}`));
   const m = modal({ title: t('settings'), body, wide: true, buttons: [{ label: t('close'), kind: 'primary' }] });
   renderUpdatePanel();
+  renderBackupList();
+}
+
+async function renderBackupList() {
+  const el = $('#backup-list');
+  if (!el) return;
+  const list = await api.listBackups();
+  if (!list.length) { el.replaceChildren(h('div', { class: 'muted small' }, t('noBackups'))); return; }
+  const fmt = (b) => {
+    const d = b.date ? new Date(b.date) : null;
+    return d ? d.toLocaleString(S.settings.uiLang === 'ar' ? 'ar' : S.settings.uiLang) : b.name;
+  };
+  const rows = list.slice(0, S.showAllBackups ? list.length : 8).map((b) => h('div', { class: 'backup-row' },
+    h('span', null, fmt(b)),
+    h('span', { class: 'muted small' }, t('backupReason.' + b.reason) + (b.cvCount != null ? ' · ' + t('cvCount', { n: b.cvCount }) : '')),
+    h('button', { class: 'btn small', onclick: () => restoreBackupAction(b, fmt(b)) }, t('restore'))));
+  if (list.length > 8 && !S.showAllBackups) rows.push(h('button', { class: 'btn small', onclick: () => { S.showAllBackups = true; renderBackupList(); } }, t('showAll', { n: list.length })));
+  el.replaceChildren(...rows);
+}
+
+async function restoreBackupAction(b, when) {
+  const ok = await confirmDialog(t('restore'), t('restoreConfirm', { d: when }));
+  if (!ok) return;
+  try {
+    await replaceDataAndReload(() => api.restoreBackup(b.name));
+  } catch (e) {
+    toast(t('restoreFailed') + ': ' + (e.message || e), 'err', 6000);
+  }
+}
+
+async function importOldData() {
+  try {
+    const r = await replaceDataAndReload(async () => {
+      const res = await api.importLegacy({ title: t('importOldPick') });
+      if (!res) return false;
+      if (!res.ok) { toast(t('importOldNotFound'), 'err', 6000); return false; }
+      return res;
+    });
+    if (r && r.ok) toast(t('migrated', { n: r.total, added: r.added + r.updated }), 'ok', 6000);
+  } catch (e) {
+    toast(t('importFailed') + ': ' + (e.message || e), 'err', 6000);
+  }
 }
 
 function renderUpdatePanel() {
@@ -1112,7 +1187,7 @@ function renderUpdateProgress() {
 let checkingNow = false;
 const notifiedThisRun = new Set();
 
-async function checkUpdates(silent) {
+async function checkUpdates(silent, autoInstall) {
   if (checkingNow) return;
   checkingNow = true;
   // Background checks stay invisible unless something new is found.
@@ -1127,7 +1202,8 @@ async function checkUpdates(silent) {
     S.update = { ...S.update, state: silent ? 'idle' : 'error', error: r.error };
   } else if (r.available) {
     const isNew = prev !== r.manifest.version;
-    S.update = { ...S.update, state: 'available', manifest: r.manifest };
+    S.update = { ...S.update, state: 'available', manifest: r.manifest, migrate: !!r.migrate };
+    if (autoInstall && r.migrate) { renderUpdateBanner(); return doUpdate(); }
     const v = `CV Maker v${r.manifest.displayVersion || r.manifest.version}`;
     // Notify once per version every time the program runs, until it is installed.
     if (S.settings.updateNotify !== false && !notifiedThisRun.has(r.manifest.version)) {
@@ -1151,7 +1227,7 @@ function renderUpdateBanner() {
   b.hidden = false;
   const items = [];
   if (u.state === 'available') {
-    items.push(h('span', null, '🎉 ' + t('updateAvailable', { v })),
+    items.push(h('span', null, '🎉 ' + (u.migrate ? t('migrateAvailable', { v }) : t('updateAvailable', { v }))),
       h('button', { class: 'btn primary small', onclick: doUpdate }, t('updateNow')),
       h('button', { class: 'icon-btn', onclick: () => { b.hidden = true; } }, '✕'));
   } else if (u.state === 'downloading') {

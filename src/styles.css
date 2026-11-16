@@ -263,3 +263,8 @@ kbd { display: inline-block; min-width: 56px; padding: 2px 6px; border: 1px soli
 .ch-call { --c: #64748b; } .ch-sms { --c: #d97706; } .ch-whatsapp { --c: #25d366; }
 .ch-telegram { --c: #229ed9; } .ch-signal { --c: #3a76f0; } .ch-viber { --c: #7360f2; }
 .phones > .btn { align-self: flex-start; }
+
+/* backups */
+.backup-list { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 12px; max-height: 260px; overflow: auto; }
+.backup-row { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; padding: 6px 10px; border-radius: 8px; background: var(--panel-2, rgba(127,127,127,.08)); }
+.backup-list > .btn.small { align-self: flex-start; }
