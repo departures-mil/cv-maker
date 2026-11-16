@@ -1,7 +1,7 @@
 {
   "name": "cv-maker",
   "productName": "CV Maker",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "CV Maker",
   "main": "boot.js",
   "private": true,
@@ -68,7 +68,8 @@
       "language": "1055",
       "multiLanguageInstaller": false,
       "artifactName": "CV-Maker-Setup-${version}.${ext}",
-      "uninstallDisplayName": "CV Maker"
+      "uninstallDisplayName": "CV Maker",
+      "include": "build/installer.nsh"
     }
   },
   "cvmaker": {

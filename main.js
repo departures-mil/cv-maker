@@ -38,19 +38,36 @@ function updateLog(line) {
 }
 
 // First start of the installed edition: bring over the records of the portable edition.
+// Where they are comes from (a) the note a portable copy leaves before running the setup, or
+// (b) the folder the setup was started from (written by build/installer.nsh), if a
+// "CV Maker Data" folder sits next to it.
 let MIGRATION = null;
-if (!PORTABLE_DIR) {
+function legacyCandidates() {
+  const list = [];
   try {
     const marker = JSON.parse(fs.readFileSync(MIGRATE_FILE, 'utf8'));
-    const src = marker && marker.dataDir;
-    const done = store.importedSources().includes(path.resolve(src || '').toLowerCase());
-    if (src && !done && DataStore.isDataDir(src)) {
-      MIGRATION = store.importLegacy(src);
-      updateLog(`imported portable data from ${src}: ${JSON.stringify(MIGRATION)}`);
-    }
+    if (marker && marker.dataDir) list.push(marker.dataDir);
     fs.renameSync(MIGRATE_FILE, MIGRATE_FILE.replace(/\.json$/, `.done-${Date.now()}.json`));
-  } catch (e) {
-    if (e.code !== 'ENOENT') updateLog('portable import failed: ' + (e.stack || e.message));
+  } catch (e) { if (e.code !== 'ENOENT') updateLog('migrate note: ' + e.message); }
+  try {
+    const raw = fs.readFileSync(path.join(path.dirname(process.execPath), 'installer-dir.txt'));
+    const dir = (raw[0] === 0xff && raw[1] === 0xfe ? raw.slice(2) : raw).toString(raw.includes(0) ? 'utf16le' : 'utf8').replace(/\0/g, '').trim();
+    if (dir) list.push(path.join(dir, 'CV Maker Data'));
+  } catch {}
+  return list;
+}
+if (!PORTABLE_DIR) {
+  const done = new Set(store.importedSources());
+  for (const src of legacyCandidates()) {
+    try {
+      if (done.has(path.resolve(src).toLowerCase()) || !DataStore.isDataDir(src)) continue;
+      const r = store.importLegacy(src);
+      done.add(path.resolve(src).toLowerCase());
+      MIGRATION = MIGRATION ? { ...r, added: MIGRATION.added + r.added, updated: MIGRATION.updated + r.updated } : r;
+      updateLog(`imported portable data from ${src}: ${JSON.stringify(r)}`);
+    } catch (e) {
+      updateLog(`portable import from ${src} failed: ` + (e.stack || e.message));
+    }
   }
 }
 try { store.dailyBackup(); } catch (e) { updateLog('daily backup failed: ' + e.message); }
