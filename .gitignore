@@ -1,6 +1,5 @@
-node_modules
+node_modules/
 dist/
-firebase/public/downloads/
+firebase/public/
 firebase/.firebase/
 *.log
-firebase/public/bundles/

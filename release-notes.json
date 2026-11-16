@@ -1,0 +1,7 @@
+{
+  "2.0.0": {
+    "tr": "Kurulumlu sürüme geçiş: masaüstü ve Başlat menüsü kısayolu. Eski kayıtlar otomatik aktarılır. Otomatik günlük yedek, yedekten geri yükleme ve eski verileri içe aktarma eklendi.",
+    "en": "Moves to the installed edition with desktop and Start menu shortcuts. Old records are moved over automatically. Added automatic daily backups, restore from backup and import of old data.",
+    "ar": "الانتقال إلى النسخة المثبّتة مع اختصار على سطح المكتب وقائمة ابدأ. تُنقل السجلات القديمة تلقائيًا. أُضيف نسخ احتياطي يومي تلقائي واستعادة من نسخة احتياطية واستيراد البيانات القديمة."
+  }
+}

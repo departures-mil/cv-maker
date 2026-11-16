@@ -1,18 +1,17 @@
 'use strict';
-/* Builds the Windows portable .exe: dist/CV Maker vX.Y.exe */
+/* Builds the Windows installer: dist/CV-Maker-Setup-<version>.exe */
 const path = require('path');
-const builder = require('electron-builder');
 const pkg = require('../package.json');
 
 async function build() {
-  const [major, minor] = pkg.version.split('.');
-  const displayVersion = `${major}.${minor}`;
-  const fileName = `CV Maker v${displayVersion}.exe`;
+  const builder = require('electron-builder');
+  const fileName = `CV-Maker-Setup-${pkg.version}.exe`;
   await builder.build({
-    targets: builder.Platform.WINDOWS.createTarget(['portable'], builder.Arch.x64),
-    config: { ...pkg.build, portable: { artifactName: fileName } },
+    targets: builder.Platform.WINDOWS.createTarget(['nsis'], builder.Arch.x64),
+    config: pkg.build,
+    publish: 'never',
   });
-  return { displayVersion, fileName, filePath: path.join(__dirname, '..', 'dist', fileName) };
+  return { fileName, filePath: path.join(__dirname, '..', 'dist', fileName) };
 }
 
 module.exports = { build };

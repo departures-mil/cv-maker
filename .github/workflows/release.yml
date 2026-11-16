@@ -1,6 +1,9 @@
-name: Build and release
-
+# Builds the Windows installer and the small update bundle, and publishes them as a
+# GitHub release. Installed programs read
+#   https://github.com/departures-mil/cv-maker/releases/latest/download/latest.json
+# at start, so a new release reaches them automatically.
 # A release is made whenever package.json lands on main with a version that has no release yet.
+name: Build and release
 on:
   push:
     branches: [main]
@@ -10,34 +13,47 @@ on:
 permissions:
   contents: write
 
+concurrency: release
+
 jobs:
   release:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Read version
         id: v
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          VER=$(node -p "require('./package.json').version.split('.').slice(0,2).join('.')")
+          VER=$(node -p "require('./package.json').version")
           echo "ver=$VER" >> "$GITHUB_OUTPUT"
           if gh release view "v$VER" >/dev/null 2>&1; then echo "exists=1" >> "$GITHUB_OUTPUT"; fi
+
       - uses: actions/setup-node@v4
         if: steps.v.outputs.exists != '1'
         with:
           node-version: 22
           cache: npm
-      - if: steps.v.outputs.exists != '1'
-        run: npm ci
-      - name: Build portable exe
+
+      - name: Install
         if: steps.v.outputs.exists != '1'
-        run: node scripts/build.js
+        run: npm ci
+
+      - name: Test
+        if: steps.v.outputs.exists != '1'
+        run: npm test
+
+      - name: Build installer and bundle
+        if: steps.v.outputs.exists != '1'
+        run: node scripts/release.js
+
       - name: Publish GitHub release
         if: steps.v.outputs.exists != '1'
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           VER: ${{ steps.v.outputs.ver }}
         run: |
-          cp "dist/CV Maker v${VER}.exe" "dist/CV-Maker-v${VER}.exe"
-          gh release create "v${VER}" "dist/CV-Maker-v${VER}.exe" --target "$GITHUB_SHA" --title "CV Maker v${VER}" --notes-file release-notes.md --latest
+          gh release create "v${VER}" dist/release/* --target "$GITHUB_SHA" --title "CV Maker v${VER%.*}" --notes-file dist/release-notes.md --latest
