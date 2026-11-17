@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, dialog, shell, Menu, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu, Notification, net, safeStorage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -9,6 +9,7 @@ const { buildPdf } = require('./lib/pdf');
 const { buildDocx } = require('./lib/docx');
 const updater = require('./lib/updater');
 const { DataStore } = require('./lib/datastore');
+const sync = require('./lib/sync');
 
 const APP_NAME = 'CV Maker';
 // Version of the code that is running (an update bundle can be newer than the .exe).
@@ -323,6 +324,66 @@ ipcMain.handle('jpeg:save', (_e, { target, images, open }) => {
   if (open) (paths.length === 1 ? shell.openPath(paths[0]) : shell.showItemInFolder(paths[0]));
   return { paths, dir };
 });
+
+// ---------- sync (GitHub) ----------
+// The key is kept in <data>/sync.json, encrypted with Windows' own protection (safeStorage),
+// and never goes into the backups.
+const SYNC_FILE = path.join(DATA_DIR, 'sync.json');
+const SYNC_STATE = path.join(DATA_DIR, 'sync-state.json');
+function syncConfig() {
+  try {
+    const c = JSON.parse(fs.readFileSync(SYNC_FILE, 'utf8'));
+    let token = c.token || '';
+    if (c.enc && token) token = safeStorage.decryptString(Buffer.from(token, 'base64'));
+    return { token, repo: c.repo || '' };
+  } catch { return { token: '', repo: '' }; }
+}
+function saveSyncConfig({ token, repo }) {
+  const enc = !!token && safeStorage.isEncryptionAvailable();
+  const stored = enc ? safeStorage.encryptString(token).toString('base64') : (token || '');
+  fs.writeFileSync(SYNC_FILE, JSON.stringify({ token: stored, enc, repo: repo || '' }));
+}
+function syncStatus() {
+  const c = syncConfig();
+  let st = {};
+  try { st = JSON.parse(fs.readFileSync(SYNC_STATE, 'utf8')); } catch {}
+  return { configured: !!c.token, repo: st.repo || c.repo || '', login: st.login || '', lastSync: st.lastSync || 0 };
+}
+let syncRunning = null;
+async function runSync() {
+  const cfg = syncConfig();
+  const backup = () => { try { store.backup('before-sync'); } catch (e) { updateLog('backup before sync failed: ' + e.message); } };
+  const step = (s) => win && win.webContents.send('sync:step', s);
+  const go = () => sync.syncNow({ fetchFn: (u, o) => net.fetch(u, o), store, cfg, stateFile: SYNC_STATE, onStep: step, beforeLocalWrite: backup });
+  try {
+    let r;
+    try { r = await go(); } catch (e) {
+      if (e.code !== 'conflict') throw e;
+      r = await go(); // someone else synced at the same moment: read again and retry once
+    }
+    updateLog(`sync ${r.repo}: ${JSON.stringify({ ...r, repo: undefined })}`);
+    if (!cfg.repo && r.repo) saveSyncConfig({ ...cfg, repo: r.repo });
+    return { ok: true, ...r };
+  } catch (e) {
+    updateLog('sync failed: ' + (e.code || '') + ' ' + e.message);
+    return { ok: false, error: e.code || 'http', message: e.message };
+  }
+}
+ipcMain.handle('sync:status', () => syncStatus());
+ipcMain.handle('sync:configure', async (_e, { token, repo }) => {
+  const prev = syncConfig();
+  saveSyncConfig({ token: (token || '').trim() || prev.token, repo: (repo || '').trim() });
+  return syncStatus();
+});
+ipcMain.handle('sync:disconnect', () => {
+  try { fs.unlinkSync(SYNC_FILE); } catch {}
+  return syncStatus();
+});
+ipcMain.handle('sync:run', async () => {
+  if (!syncRunning) syncRunning = runSync().finally(() => { syncRunning = null; });
+  return syncRunning;
+});
+ipcMain.on('sync:openTokenPage', () => shell.openExternal('https://github.com/settings/tokens/new?scopes=repo&description=CV%20Maker%20E%C5%9Fitleme'));
 
 // ---------- updates ----------
 // Kinds of update (all announced in latest.json of the newest GitHub release, see update-config.json):

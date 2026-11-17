@@ -14,6 +14,7 @@ const S = {
   open: new Set(),
   history: { stack: [], index: -1 },
   update: { state: 'idle', manifest: null, progress: 0, error: '' },
+  sync: { status: null, running: false, error: '', step: '' },
 };
 
 const DEFAULT_SETTINGS = {
@@ -21,6 +22,7 @@ const DEFAULT_SETTINGS = {
   theme: 'light',
   autoUpdate: true,
   updateNotify: true,
+  autoSync: true,
   openAfterExport: true,
   zoom: 'fit',
   lastCvId: null,
@@ -182,11 +184,23 @@ async function boot() {
   window.addEventListener('resize', debounce(fitPreview, 100));
   api.onFullscreen(() => {});
   api.onUpdateProgress((p) => {
-    S.update.progress = p.total ? p.received / p.total : 0;
-    S.update.received = p.received;
-    S.update.total = p.total;
+    const u = S.update, now = performance.now();
+    if (!u.lastT || p.received < (u.received || 0)) { u.lastT = now; u.lastR = 0; u.speed = 0; }
+    const dt = (now - u.lastT) / 1000;
+    if (dt >= 0.5) {
+      const v = (p.received - u.lastR) / dt;
+      u.speed = u.speed ? u.speed * 0.6 + v * 0.4 : v;
+      u.lastT = now; u.lastR = p.received;
+    }
+    u.progress = p.total ? p.received / p.total : 0;
+    u.received = p.received;
+    u.total = p.total;
     renderUpdateProgress();
   });
+  api.onSyncStep((st) => { S.sync.step = st; renderSyncButton(); });
+  S.sync.status = await api.syncStatus();
+  renderSyncButton();
+  if (S.sync.status.configured && S.settings.autoSync) setTimeout(() => doSync(true), 2500);
   // Updates are looked for once, when the program opens.
   // A portable copy that just updated itself continues straight to the installed edition.
   if (S.info.portable && S.info.afterUpdate) setTimeout(() => checkUpdates(true, true), 800);
@@ -223,6 +237,7 @@ function applyLanguage() {
   renderEditor();
   renderPreview();
   renderUpdateBanner();
+  renderSyncButton();
 }
 
 /* ---------- top bar ---------- */
@@ -251,6 +266,8 @@ function bindTopbar() {
     { label: t('exportJpeg'), icon: '🖼', action: exportJpeg },
   ]);
   $('#btn-settings').onclick = openSettings;
+  $('#btn-sync').onclick = () => doSync(false);
+  $('#btn-update').onclick = updateButtonAction;
   for (const tab of document.querySelectorAll('.tab')) {
     tab.onclick = () => {
       S.tab = tab.dataset.tab;
@@ -1095,6 +1112,10 @@ function openSettings() {
     h('details', { class: 'advanced' }, h('summary', null, t('advanced')),
       row(t('updateServer'), h('input', { class: 'input', dir: 'ltr', value: st.updateUrl, placeholder: 'https://…', onchange: (e) => setSetting('updateUrl', e.target.value.trim()) }), t('updateServerHint'))),
 
+    h('h4', null, t('syncTitle')),
+    h('div', { id: 'sync-panel', class: 'update-panel' }),
+    row(t('autoSync'), toggle('autoSync'), t('autoSyncHint')),
+
     h('h4', null, t('data')),
     row(t('dataFolder'), h('button', { class: 'btn', onclick: () => api.openDataDir() }, t('openFolder')), S.info.dataDir),
     row(t('backups'), h('div', { class: 'row-btns' },
@@ -1109,6 +1130,7 @@ function openSettings() {
     h('p', { class: 'muted small about' }, `${S.info.title} · ${t(S.info.portable ? 'portableNote' : 'installedNote')}`));
   const m = modal({ title: t('settings'), body, wide: true, buttons: [{ label: t('close'), kind: 'primary' }] });
   renderUpdatePanel();
+  renderSyncPanel();
   renderBackupList();
 }
 
@@ -1154,6 +1176,7 @@ async function importOldData() {
 }
 
 function renderUpdatePanel() {
+  renderUpdateButton();
   const p = $('#update-panel');
   if (!p) return;
   const u = S.update;
@@ -1168,7 +1191,8 @@ function renderUpdatePanel() {
       h('div', null, h('b', null, t('updateAvailable', { v: `CV Maker v${mf.displayVersion || mf.version}` }))),
       notes ? h('div', { class: 'notes' }, notes) : null));
   }
-  if (u.state === 'downloading') items.push(h('div', { class: 'progress' }, h('i', { id: 'update-bar', style: `width:${u.progress * 100}%` })));
+  if (u.state === 'downloading') items.push(h('div', { class: 'progress' }, h('i', { id: 'update-bar', style: `width:${u.progress * 100}%` })),
+    h('div', { id: 'update-pct', class: 'muted small pct-line' }, progressText()));
   const btns = h('div', { class: 'row-btns' });
   if (u.state === 'available') btns.append(h('button', { class: 'btn primary', onclick: doUpdate }, '⬇ ' + t('updateNow')));
   if (!['checking', 'downloading'].includes(u.state)) btns.append(h('button', { class: 'btn', onclick: () => checkUpdates(false) }, '⟳ ' + t('checkUpdates')));
@@ -1182,6 +1206,9 @@ function renderUpdateProgress() {
   if (bb) bb.style.width = S.update.progress * 100 + '%';
   const pct = document.getElementById('banner-pct');
   if (pct) pct.textContent = progressText();
+  const sp = document.getElementById('update-pct');
+  if (sp) sp.textContent = progressText();
+  renderUpdateButton();
 }
 
 let checkingNow = false;
@@ -1220,6 +1247,7 @@ async function checkUpdates(silent, autoInstall) {
 }
 
 function renderUpdateBanner() {
+  renderUpdateButton();
   const b = $('#update-banner');
   const u = S.update;
   if (!u.manifest || !['available', 'downloading', 'ready', 'error'].includes(u.state) || (u.state === 'error' && !u.fromBanner)) { b.hidden = true; return; }
@@ -1247,14 +1275,178 @@ function renderUpdateBanner() {
 
 function progressText() {
   const u = S.update;
-  const mb = (n) => (n / 1048576).toFixed(0);
-  return u.total ? `%${Math.round(u.progress * 100)} · ${mb(u.received)}/${mb(u.total)} MB` : `${mb(u.received || 0)} MB`;
+  const lang = S.settings.uiLang;
+  const mb = (n) => (Math.max(0, n || 0) / 1048576).toLocaleString(lang, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const speed = u.speed ? ` · ${mb(u.speed)} ${t('mbPerSec')}` : '';
+  if (!u.total) return `${mb(u.received)} MB${speed}`;
+  return `%${Math.round(u.progress * 100)} · ${mb(u.received)} / ${mb(u.total)} MB · ${t('mbLeft', { n: mb(u.total - u.received) })}${speed}`;
+}
+
+/* ---------- top-right buttons: update & sync ---------- */
+
+function renderUpdateButton() {
+  const b = document.getElementById('btn-update');
+  if (!b || !S.settings) return;
+  const u = S.update;
+  const lbl = $('#update-label');
+  b.classList.toggle('working', u.state === 'checking' || u.state === 'downloading' || u.state === 'ready');
+  b.classList.toggle('attn', u.state === 'available');
+  b.classList.toggle('bad', u.state === 'error');
+  b.classList.toggle('good', u.state === 'none');
+  const v = u.manifest ? `v${u.manifest.displayVersion || u.manifest.version}` : '';
+  if (u.state === 'downloading') { lbl.textContent = `%${Math.round(u.progress * 100)}`; b.title = progressText(); }
+  else if (u.state === 'available') { lbl.textContent = `${t('updateBtn')} ${v}`; b.title = t('updateAvailable', { v: 'CV Maker ' + v }); }
+  else if (u.state === 'checking') { lbl.textContent = t('updateBtn'); b.title = t('checking'); }
+  else if (u.state === 'ready') { lbl.textContent = t('updateBtn'); b.title = t('updateRestarting'); }
+  else { lbl.textContent = t('updateBtn'); b.title = `${S.info.title} · ${u.state === 'none' ? t('upToDate') : t('checkUpdates')}`; }
+}
+
+async function updateButtonAction() {
+  const u = S.update;
+  if (u.state === 'available' || (u.state === 'error' && u.manifest && u.fromBanner)) return doUpdate();
+  if (['checking', 'downloading', 'ready'].includes(u.state)) return;
+  await checkUpdates(false);
+  if (S.update.state === 'none') toast('✓ ' + t('upToDate'), 'ok');
+  else if (S.update.state === 'error') toast(S.update.error === 'not-configured' ? t('updateNotConfigured') : t('updateError', { e: S.update.error }), 'err', 6000);
+}
+
+function syncErrorText(code) {
+  return t('syncErr.' + code) !== 'syncErr.' + code ? t('syncErr.' + code) : t('syncErr.http');
+}
+
+function fmtTime(ms) {
+  return new Date(ms).toLocaleString(S.settings.uiLang, { dateStyle: 'short', timeStyle: 'short' });
+}
+
+function renderSyncButton() {
+  const b = document.getElementById('btn-sync');
+  if (!b || !S.settings) return;
+  const sy = S.sync, st = sy.status || {};
+  b.classList.toggle('working', sy.running);
+  b.classList.toggle('bad', !sy.running && !!sy.error);
+  b.classList.toggle('good', !sy.running && !sy.error && !!st.lastSync);
+  b.classList.toggle('off', !st.configured);
+  if (sy.running) b.title = t('syncing') + (sy.step ? ' · ' + t('syncStep.' + sy.step) : '');
+  else if (!st.configured) b.title = t('syncNotSetUp');
+  else if (sy.error) b.title = '⚠ ' + syncErrorText(sy.error);
+  else b.title = st.lastSync ? t('syncLast', { d: fmtTime(st.lastSync) }) + (st.repo ? ` · ${st.repo}` : '') : t('syncNever');
+  renderSyncPanel();
+}
+
+function renderSyncPanel() {
+  const p = $('#sync-panel');
+  if (!p) return;
+  const sy = S.sync, st = sy.status || {};
+  const items = [];
+  if (!st.configured) {
+    items.push(h('div', { class: 'muted' }, t('syncNotSetUp')),
+      h('div', { class: 'row-btns' }, h('button', { class: 'btn primary', onclick: openSyncSetup }, t('syncSetUp'))));
+  } else {
+    items.push(h('div', null, h('b', null, st.repo || '—'), st.login ? h('span', { class: 'muted small' }, ` · ${st.login}`) : null));
+    if (sy.running) items.push(h('div', { class: 'muted' }, t('syncing') + (sy.step ? ' · ' + t('syncStep.' + sy.step) : '')));
+    else if (sy.error) items.push(h('div', { class: 'err-text' }, '⚠ ' + syncErrorText(sy.error)));
+    else items.push(h('div', { class: 'ok-text' }, st.lastSync ? '✓ ' + t('syncLast', { d: fmtTime(st.lastSync) }) : t('syncNever')));
+    items.push(h('div', { class: 'row-btns' },
+      h('button', { class: 'btn primary', disabled: sy.running, onclick: () => doSync(false) }, '⇅ ' + t('syncNow')),
+      h('button', { class: 'btn', onclick: openSyncSetup }, t('syncChange')),
+      h('button', { class: 'btn danger-ghost', onclick: disconnectSync }, t('syncDisconnect'))));
+  }
+  items.push(h('div', { class: 'muted small' }, t('syncHint')));
+  p.replaceChildren(...items);
+}
+
+function openSyncSetup() {
+  const st = S.sync.status || {};
+  const token = h('input', { class: 'input', type: 'password', dir: 'ltr', placeholder: st.configured ? '••••••••  (' + t('syncKeepKey') + ')' : 'ghp_…', autocomplete: 'off' });
+  const repo = h('input', { class: 'input', dir: 'ltr', value: st.repo || '', placeholder: 'cv-maker-data' });
+  const err = h('div', { class: 'err-text' });
+  const body = h('div', { class: 'settings' },
+    h('p', null, t('syncSetupIntro')),
+    h('ol', { class: 'sync-steps' },
+      h('li', null, t('syncSetupStep1'), ' ', h('button', { class: 'btn small', onclick: () => api.openTokenPage() }, '↗ ' + t('syncOpenGithub'))),
+      h('li', null, t('syncSetupStep2')),
+      h('li', null, t('syncSetupStep3'))),
+    h('label', { class: 'field' }, h('span', null, t('syncKey')), token),
+    h('label', { class: 'field' }, h('span', null, t('syncRepo')), repo, h('span', { class: 'muted small' }, t('syncRepoHint'))),
+    err);
+  modal({
+    title: t('syncTitle'), body, wide: true,
+    buttons: [
+      { label: t('cancel') },
+      { label: '⇅ ' + t('syncSaveAndRun'), kind: 'primary', action: async (close) => {
+        if (!token.value.trim() && !st.configured) { err.textContent = t('syncNeedKey'); token.focus(); return; }
+        S.sync.status = await api.syncConfigure({ token: token.value, repo: repo.value });
+        S.sync.error = '';
+        close();
+        renderSyncButton();
+        doSync(false);
+      } },
+    ],
+  });
+  setTimeout(() => token.focus(), 30);
+}
+
+async function disconnectSync() {
+  if (!(await confirmDialog(t('syncDisconnect'), t('syncDisconnectConfirm')))) return;
+  S.sync.status = await api.syncDisconnect();
+  S.sync.error = '';
+  renderSyncButton();
+}
+
+async function doSync(silent) {
+  const sy = S.sync;
+  if (!sy.status || !sy.status.configured) { if (!silent) openSyncSetup(); return; }
+  if (sy.running || saveLocked) return;
+  persistCvs.flush();
+  persistSettings.flush();
+  api.saveCvsSync({ version: 1, cvs: S.cvs });
+  // What was on disk when the sync started; anything edited during the sync is kept.
+  const before = new Map(S.cvs.map((c) => [c.id, c.updatedAt || 0]));
+  sy.running = true; sy.step = ''; sy.error = '';
+  renderSyncButton();
+  let r;
+  try { r = await api.syncRun(); } catch (e) { r = { ok: false, error: 'http', message: e.message }; }
+  sy.running = false; sy.step = '';
+  sy.status = await api.syncStatus();
+  if (!r.ok) {
+    sy.error = r.error;
+    renderSyncButton();
+    if (!silent || r.error === 'auth') toast('⚠ ' + syncErrorText(r.error), 'err', 7000);
+    return;
+  }
+  if (r.localChanged) await applySyncedData(before);
+  renderSyncButton();
+  const changes = r.received + r.sent + r.removedHere + r.removedThere;
+  if (changes) toast('✓ ' + t('syncDone', { r: r.received, s: r.sent, d: r.removedHere + r.removedThere }), 'ok', 5000);
+  else if (!silent) toast('✓ ' + t('syncNothing'), 'ok');
+}
+
+async function applySyncedData(before) {
+  const stored = await api.load();
+  const incoming = ((stored.cvs && stored.cvs.cvs) || []).map(normalizeCv);
+  const mineNow = new Map(S.cvs.map((c) => [c.id, c]));
+  const merged = incoming.map((c) => {
+    const m = mineNow.get(c.id);
+    return m && (m.updatedAt || 0) > (before.get(c.id) || 0) ? m : c; // edited during the sync
+  });
+  for (const c of S.cvs) if (!before.has(c.id) && !merged.some((x) => x.id === c.id)) merged.push(c); // created during the sync
+  if (!merged.length) merged.push(normalizeCv(buildSample(S.settings.uiLang)));
+  const curId = S.cur && S.cur.id;
+  const curBefore = S.cur && JSON.stringify(S.cur);
+  S.cvs = merged;
+  S.cur = S.cvs.find((c) => c.id === curId) || S.cvs[0];
+  persistCvs();
+  renderCvSelect();
+  if (JSON.stringify(S.cur) !== curBefore) { resetHistory(); renderEditor(); renderPreview(); }
 }
 
 async function doUpdate() {
   S.update.state = 'downloading';
   S.update.progress = 0;
   S.update.received = 0;
+  S.update.total = 0;
+  S.update.speed = 0;
+  S.update.lastT = 0;
   S.update.fromBanner = true;
   renderUpdatePanel();
   renderUpdateBanner();

@@ -42,5 +42,11 @@ contextBridge.exposeInMainWorld('api', {
   openUrl: (u) => ipcRenderer.send('update:openUrl', u),
   notify: (o) => ipcRenderer.send('app:notify', o),
   onNotifyClick: (cb) => ipcRenderer.on('app:notifyClick', () => cb()),
+  syncStatus: () => ipcRenderer.invoke('sync:status'),
+  syncConfigure: (o) => ipcRenderer.invoke('sync:configure', o),
+  syncDisconnect: () => ipcRenderer.invoke('sync:disconnect'),
+  syncRun: () => ipcRenderer.invoke('sync:run'),
+  openTokenPage: () => ipcRenderer.send('sync:openTokenPage'),
+  onSyncStep: (cb) => ipcRenderer.on('sync:step', (_e, s) => cb(s)),
   onUpdateProgress: (cb) => ipcRenderer.on('update:progress', (_e, p) => cb(p)),
 });

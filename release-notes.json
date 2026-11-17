@@ -8,5 +8,10 @@
     "tr": "Kurulum dosyası eski taşınabilir sürümün yanında çalıştırılırsa kayıtlar ilk açılışta otomatik aktarılır.",
     "en": "When the setup is run next to an old portable copy, its records are imported automatically at first start.",
     "ar": "عند تشغيل ملف التثبيت بجوار نسخة محمولة قديمة، تُستورد سجلاتها تلقائيًا عند أول تشغيل."
+  },
+  "2.1.0": {
+    "tr": "Sağ üste Eşitle ve Güncelle düğmeleri eklendi. CV kayıtları ve ekleri artık gizli bir GitHub deposuyla eşitlenebilir (Ayarlar > Eşitleme). Güncelleme indirilirken yüzde, MB, kalan MB ve indirme hızı gösterilir.",
+    "en": "Added Sync and Update buttons at the top right. CV records and attachments can now be synced with a private GitHub repository (Settings > Sync). While an update downloads, the percentage, MB, MB left and download speed are shown.",
+    "ar": "أُضيف زرّا المزامنة والتحديث أعلى اليمين. يمكن الآن مزامنة السير الذاتية ومرفقاتها مع مستودع خاص على GitHub (الإعدادات > المزامنة). أثناء تنزيل التحديث تُعرض النسبة والحجم والمتبقي وسرعة التنزيل."
   }
 }
