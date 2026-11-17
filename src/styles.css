@@ -268,3 +268,23 @@ kbd { display: inline-block; min-width: 56px; padding: 2px 6px; border: 1px soli
 .backup-list { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 12px; max-height: 260px; overflow: auto; }
 .backup-row { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; padding: 6px 10px; border-radius: 8px; background: var(--panel-2, rgba(127,127,127,.08)); }
 .backup-list > .btn.small { align-self: flex-start; }
+
+/* top-right sync & update buttons */
+.status-btn { position: relative; display: inline-flex; align-items: center; gap: 7px; padding: 0 12px 0 10px; min-width: 96px; justify-content: center; font-variant-numeric: tabular-nums; }
+.status-btn .ico { display: inline-block; font-size: 15px; line-height: 1; }
+.status-btn .dot { position: absolute; top: 5px; inset-inline-end: 5px; width: 8px; height: 8px; border-radius: 50%; background: transparent; }
+.status-btn.good .dot { background: #22c55e; }
+.status-btn.bad .dot { background: #ef4444; }
+.status-btn.off { opacity: .75; }
+.status-btn.off .dot { background: #94a3b8; }
+.status-btn.attn { background: #16a34a; border-color: #16a34a; color: #fff; font-weight: 600; }
+.status-btn.attn:hover:not(:disabled) { background: #15803d; }
+.status-btn.attn .dot { background: #fde047; animation: pulse 1.4s ease-in-out infinite; }
+.status-btn.working .ico { animation: spin 1s linear infinite; }
+#btn-update.working .ico { animation: bob 1s ease-in-out infinite; }
+@keyframes pulse { 50% { transform: scale(1.6); opacity: .5; } }
+@keyframes bob { 50% { transform: translateY(-3px); } }
+.pct-line { margin-top: 6px; font-variant-numeric: tabular-nums; }
+.update-banner .pct { min-width: 320px; }
+.sync-steps { margin: 6px 0 14px; padding-inline-start: 20px; display: flex; flex-direction: column; gap: 8px; }
+.settings .field { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }

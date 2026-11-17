@@ -10,9 +10,16 @@ Windows için CV hazırlama programı (Electron). Kurulumlu sürüm: `CV-Maker-S
 - Taşınabilir sürümden (v1.x) gelenler: v2.0 güncellemesi kurulumu indirir, kurar; kurulan program açılışta
   eski kayıtları birleştirir. Eski klasör olduğu gibi kalır (`data\backups\legacy-portable_*` içinde de kopyası var).
 
+## Eşitleme (GitHub)
+Sağ üstteki **Eşitle** düğmesi CV kayıtlarını ve eklerini gizli bir GitHub deposuyla (varsayılan `<kullanıcı>/cv-maker-data`,
+ilk eşitlemede kendiliğinden oluşturulur) iki yönlü eşitler. Ayarlar > Eşitleme'de bir kez `repo` izinli GitHub anahtarı girilir;
+anahtar `data\sync.json` içinde Windows korumasıyla şifreli tutulur. Aynı kayıt için son düzenlenen kazanır, silinen kayıt
+diğer bilgisayarlardan da kalkar. Yerel kayıtlar değişmeden önce `before-sync` yedeği alınır. Açılışta otomatik eşitleme ayardan kapatılabilir.
+
 ## Güncellemeler
 Program açılışta `https://github.com/departures-mil/cv-maker/releases/latest/download/latest.json` dosyasını okur.
-Yeni sürüm varsa bildirim gelir, üstte "Şimdi güncelle" çıkar.
+Yeni sürüm varsa bildirim gelir, üstte "Şimdi güncelle" çıkar; sağ üstteki **Güncelle** düğmesi de yeşile döner
+(tıklayınca denetler ya da tek tıkla günceller). İndirirken yüzde, MB, kalan MB ve hız gösterilir.
 - Küçük güncelleme (bundle, ~150 KB): yalnızca programın kendi dosyaları; `data\app\<sürüm>` içine açılır.
 - Tam güncelleme (kurulum): Electron veya npm paketleri değişince. `package.json > cvmaker.minShell` yeni
   sürüme yükseltilir; eski kurulumlar o zaman kurulum dosyasını indirip sessizce kurar.

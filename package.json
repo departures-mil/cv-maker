@@ -1,7 +1,7 @@
 {
   "name": "cv-maker",
   "productName": "CV Maker",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "description": "CV Maker",
   "main": "boot.js",
   "private": true,
@@ -9,7 +9,7 @@
     "start": "electron .",
     "build": "node scripts/build.js",
     "release": "node scripts/release.js",
-    "test": "node test/datastore.test.js"
+    "test": "node test/datastore.test.js && node test/sync.test.js"
   },
   "dependencies": {
     "docx": "^9.14.0",
