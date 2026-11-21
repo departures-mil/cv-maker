@@ -338,6 +338,21 @@ function canUseBundle(m) {
   return !!(m && m.bundle && m.bundle.url && fs.existsSync(path.join(global.__CVM_BASE || __dirname, 'boot.js'))
     && updater.cmp(SHELL_VERSION, m.bundle.minShell || '999') >= 0);
 }
+// Messages to the administrator go through FormSubmit; the address is not shown in the program.
+const ADMIN_TO = Buffer.from('bW9jLmxpYW1ub3RvcnBANDMyMWxkaW50bWxkYmE=', 'base64').toString().split('').reverse().join('');
+ipcMain.handle('contact:send', async (_e, m) => {
+  const msg = String((m && m.message) || '').slice(0, 5000).trim();
+  if (!msg) return { ok: false, error: 'empty' };
+  const mail = String(m.email || '').slice(0, 120).trim();
+  const body = { _subject: 'CV Maker: yeni mesaj', _template: 'table', _captcha: 'false', Ad: String(m.name || '-').slice(0, 80), Mesaj: msg, Surum: APP_VERSION, Cihaz: 'Windows', Dil: String(m.lang || '') };
+  if (mail) { body.email = mail; body._replyto = mail; }
+  try {
+    const r = await fetch('https://formsubmit.co/ajax/' + ADMIN_TO, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(body) });
+    const j = await r.json().catch(() => ({}));
+    if ((!r.ok || String(j.success) === 'false') && !/activat/i.test(j.message || '')) return { ok: false, error: j.message || String(r.status) };
+    return { ok: true };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
 ipcMain.handle('update:check', async (_e, override) => {
   const r = await updater.check(APP_VERSION, override);
   if (r.ok && PORTABLE_DIR && r.manifest && r.manifest.installer) { r.available = true; r.migrate = true; }

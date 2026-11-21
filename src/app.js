@@ -183,6 +183,9 @@ async function boot() {
   api.onFullscreen(() => {});
   api.onUpdateProgress((p) => {
     S.update.progress = p.total ? p.received / p.total : 0;
+    const now = Date.now(), sp = S.update._sp || (S.update._sp = { t: now, b: p.received || 0, v: 0 });
+    if (now - sp.t >= 700) { const v = ((p.received || 0) - sp.b) / ((now - sp.t) / 1000); sp.v = sp.v ? sp.v * 0.6 + v * 0.4 : v; sp.t = now; sp.b = p.received || 0; }
+    S.update.speed = sp.v;
     S.update.received = p.received;
     S.update.total = p.total;
     renderUpdateProgress();
@@ -1106,10 +1109,29 @@ function openSettings() {
     h('h4', null, t('shortcuts')),
     h('div', { class: 'shortcuts' }, [['Ctrl+Z', t('undo')], ['Ctrl+Y', t('redo')], ['Ctrl+P', t('exportPdf')], ['F11', t('toggleFullscreen')]].map(([k, v]) =>
       h('div', null, h('kbd', null, k), ' ', v))),
+    h('h4', null, t('contactAdmin')),
+    h('div', { class: 'muted small' }, t('contactInfo')),
+    contactForm(),
     h('p', { class: 'muted small about' }, `${S.info.title} · ${t(S.info.portable ? 'portableNote' : 'installedNote')}`));
   const m = modal({ title: t('settings'), body, wide: true, buttons: [{ label: t('close'), kind: 'primary' }] });
   renderUpdatePanel();
   renderBackupList();
+}
+
+function contactForm() {
+  const name = h('input', { class: 'input', dir: 'auto', maxlength: 80, placeholder: t('contactName') });
+  const mail = h('input', { class: 'input', dir: 'ltr', maxlength: 120, inputmode: 'email', placeholder: t('contactMail') });
+  const msg = h('textarea', { class: 'input', dir: 'auto', maxlength: 5000, rows: 5, placeholder: t('contactMsg'), style: 'width:100%;resize:vertical' });
+  const btn = h('button', { class: 'btn primary', onclick: async () => {
+    const m = msg.value.trim(), e = mail.value.trim();
+    if (!m) { toast(t('contactEmpty'), 'err'); return; }
+    if (e && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) { toast(t('contactBadMail'), 'err'); return; }
+    btn.disabled = true;
+    const r = await api.sendContact({ name: name.value.trim(), email: e, message: m, lang: S.settings.uiLang }).catch((x) => ({ ok: false, error: x.message }));
+    btn.disabled = false;
+    if (r && r.ok) { msg.value = ''; toast(t('contactSent'), 'ok', 5000); } else toast(t('contactFail'), 'err', 6000);
+  } }, '✉ ' + t('contactSend'));
+  return h('div', { class: 'contact-form', style: 'display:grid;gap:8px;margin-top:8px' }, h('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:8px' }, name, mail), msg, h('div', { class: 'row-btns' }, btn));
 }
 
 async function renderBackupList() {
@@ -1169,6 +1191,7 @@ function renderUpdatePanel() {
       notes ? h('div', { class: 'notes' }, notes) : null));
   }
   if (u.state === 'downloading') items.push(h('div', { class: 'progress' }, h('i', { id: 'update-bar', style: `width:${u.progress * 100}%` })));
+  if (u.state === 'downloading') items.push(h('div', { id: 'update-pct', class: 'muted small' }, progressText()));
   const btns = h('div', { class: 'row-btns' });
   if (u.state === 'available') btns.append(h('button', { class: 'btn primary', onclick: doUpdate }, '⬇ ' + t('updateNow')));
   if (!['checking', 'downloading'].includes(u.state)) btns.append(h('button', { class: 'btn', onclick: () => checkUpdates(false) }, '⟳ ' + t('checkUpdates')));
@@ -1182,6 +1205,8 @@ function renderUpdateProgress() {
   if (bb) bb.style.width = S.update.progress * 100 + '%';
   const pct = document.getElementById('banner-pct');
   if (pct) pct.textContent = progressText();
+  const pp = document.getElementById('update-pct');
+  if (pp) pp.textContent = progressText();
 }
 
 let checkingNow = false;
@@ -1247,14 +1272,19 @@ function renderUpdateBanner() {
 
 function progressText() {
   const u = S.update;
-  const mb = (n) => (n / 1048576).toFixed(0);
-  return u.total ? `%${Math.round(u.progress * 100)} · ${mb(u.received)}/${mb(u.total)} MB` : `${mb(u.received || 0)} MB`;
+  const mb = (n) => (n / 1048576).toFixed(n < 10485760 ? 1 : 0);
+  const sp = u.speed > 0 ? ` · ${u.speed >= 1048576 ? (u.speed / 1048576).toFixed(1) + ' MB/s' : Math.round(u.speed / 1024) + ' KB/s'}` : '';
+  return u.total
+    ? `%${Math.round(u.progress * 100)} · ${mb(u.received || 0)} / ${mb(u.total)} MB · ${t('remaining', { n: mb(Math.max(0, u.total - (u.received || 0))) })}${sp}`
+    : `${mb(u.received || 0)} MB${sp}`;
 }
 
 async function doUpdate() {
   S.update.state = 'downloading';
   S.update.progress = 0;
   S.update.received = 0;
+  S.update._sp = null;
+  S.update.speed = 0;
   S.update.fromBanner = true;
   renderUpdatePanel();
   renderUpdateBanner();

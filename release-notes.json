@@ -8,5 +8,10 @@
     "tr": "Kurulum dosyası eski taşınabilir sürümün yanında çalıştırılırsa kayıtlar ilk açılışta otomatik aktarılır.",
     "en": "When the setup is run next to an old portable copy, its records are imported automatically at first start.",
     "ar": "عند تشغيل ملف التثبيت بجوار نسخة محمولة قديمة، تُستورد سجلاتها تلقائيًا عند أول تشغيل."
+  },
+  "2.0.2": {
+    "tr": "Ayarların sonuna \"Admin ile iletişime geç\" bölümü eklendi. Güncelleme indirilirken inen/kalan MB ve indirme hızı gösteriliyor.",
+    "en": "Added a \"Contact the admin\" section at the end of Settings. Update downloads now show downloaded/remaining MB and download speed.",
+    "ar": "أُضيف قسم «التواصل مع المسؤول» في نهاية الإعدادات. يعرض تنزيل التحديث الآن الميغابايت المنزّلة والمتبقية وسرعة التنزيل."
   }
 }

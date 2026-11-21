@@ -3,6 +3,7 @@
 
 const I18N = {
   tr: {
+    contactAdmin: 'Admin ile iletişime geç', contactInfo: 'Programı geliştirmemiz için öneri, istek ve hata bildirimlerinizi yazın; mesajınız doğrudan yöneticiye ulaşır.', contactName: 'Adınız (isteğe bağlı)', contactMail: 'E-posta (yanıt için, isteğe bağlı)', contactMsg: 'Mesajınız', contactSend: 'Gönder', contactEmpty: 'Lütfen mesajınızı yazın.', contactBadMail: 'E-posta adresi geçerli değil.', contactSent: 'Mesajınız yöneticiye iletildi. Teşekkürler!', contactFail: 'Mesaj gönderilemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.', remaining: '{n} MB kaldı',
     migrated: 'Eski kayıtlarınız aktarıldı: toplam {n} CV ({added} yeni/güncel). Eski klasöre dokunulmadı.', migrateAvailable: 'Kurulumlu sürüm hazır: {v}. Kayıtlarınız otomatik aktarılır.',
     backups: 'Yedekler', backupNow: 'Şimdi yedekle', backupDone: 'Yedek alındı', backupsHint: 'Her gün ilk açılışta, her güncellemeden ve geri yüklemeden önce otomatik yedek alınır. Yedekler silinmez.',
     noBackups: 'Henüz yedek yok.', restore: 'Geri yükle', restoreConfirm: '{d} tarihli yedek geri yüklenecek. Şu anki hâliniz de önce yedeklenir. Devam edilsin mi?', restoreFailed: 'Geri yükleme başarısız',
@@ -65,6 +66,7 @@ const I18N = {
   },
 
   en: {
+    contactAdmin: 'Contact the admin', contactInfo: 'Send your suggestions, requests and bug reports to help us improve the program; your message goes straight to the administrator.', contactName: 'Your name (optional)', contactMail: 'Email (for a reply, optional)', contactMsg: 'Your message', contactSend: 'Send', contactEmpty: 'Please write your message.', contactBadMail: 'The email address is not valid.', contactSent: 'Your message has been delivered to the administrator. Thank you!', contactFail: 'The message could not be sent. Check your internet connection and try again.', remaining: '{n} MB left',
     migrated: 'Your old records were imported: {n} CVs in total ({added} new/updated). The old folder was left untouched.', migrateAvailable: 'Installed edition ready: {v}. Your records are moved over automatically.',
     backups: 'Backups', backupNow: 'Back up now', backupDone: 'Backup created', backupsHint: 'A backup is made automatically at the first start of each day and before every update and restore. Backups are never deleted.',
     noBackups: 'No backups yet.', restore: 'Restore', restoreConfirm: 'The backup from {d} will be restored. Your current state is backed up first. Continue?', restoreFailed: 'Restore failed',
@@ -127,6 +129,7 @@ const I18N = {
   },
 
   ar: {
+    contactAdmin: 'التواصل مع المسؤول', contactInfo: 'أرسل اقتراحاتك وطلباتك وبلاغات الأخطاء لمساعدتنا على تطوير البرنامج؛ تصل رسالتك مباشرة إلى المسؤول.', contactName: 'اسمك (اختياري)', contactMail: 'البريد الإلكتروني (للرد، اختياري)', contactMsg: 'رسالتك', contactSend: 'إرسال', contactEmpty: 'يرجى كتابة رسالتك.', contactBadMail: 'عنوان البريد الإلكتروني غير صالح.', contactSent: 'تم إيصال رسالتك إلى المسؤول. شكرًا لك!', contactFail: 'تعذّر إرسال الرسالة. تحقّق من اتصالك بالإنترنت وحاول مجددًا.', remaining: 'متبقٍ {n} ميغابايت',
     migrated: 'تم استيراد سجلاتك القديمة: {n} سيرة ذاتية إجمالًا ({added} جديدة/محدّثة). لم يتم المساس بالمجلد القديم.', migrateAvailable: 'النسخة المثبّتة جاهزة: {v}. تُنقل سجلاتك تلقائيًا.',
     backups: 'النسخ الاحتياطية', backupNow: 'نسخ احتياطي الآن', backupDone: 'تم إنشاء نسخة احتياطية', backupsHint: 'تُنشأ نسخة احتياطية تلقائيًا عند أول تشغيل كل يوم وقبل كل تحديث واستعادة. لا تُحذف النسخ الاحتياطية.',
     noBackups: 'لا توجد نسخ احتياطية بعد.', restore: 'استعادة', restoreConfirm: 'ستتم استعادة النسخة الاحتياطية بتاريخ {d}. يتم أولًا حفظ نسخة من حالتك الحالية. هل تريد المتابعة؟', restoreFailed: 'فشلت الاستعادة',
