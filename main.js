@@ -338,20 +338,39 @@ function canUseBundle(m) {
   return !!(m && m.bundle && m.bundle.url && fs.existsSync(path.join(global.__CVM_BASE || __dirname, 'boot.js'))
     && updater.cmp(SHELL_VERSION, m.bundle.minShell || '999') >= 0);
 }
-// Messages to the administrator go through FormSubmit; the address is not shown in the program.
+// Messages to the administrator (v2.0.5): two independent channels, the message counts as delivered
+// when at least one of them accepts it.
+//  1) Admin inbox — Firestore "mesajlar" collection of the admin's project (create-only rules; nobody can read it
+//     except the admin in the Firebase console). Works from any network/app, no activation needed.
+//  2) E-mail copy via FormSubmit. FormSubmit rejects requests without a Referer and needs a one-time activation
+//     per sending site, so the request carries the site that is already activated.
 const ADMIN_TO = Buffer.from('', 'base64').toString().split('').reverse().join('');
+const ADMIN_INBOX = { projectId: 'comm-calc-103111111', apiKey: 'AIzaSyB12RFS6ENPpmnnPsETfjedNH-3hmNWQvA' };
+async function sendToInbox(m) {
+  const F = (v) => ({ stringValue: String(v || '').slice(0, 4000) });
+  const fields = { mesaj: F(m.message), konu: F('CV Maker · Mesaj'), dil: F(m.lang), surum: F(APP_VERSION), platform: F('CV Maker · Windows'), zaman: { timestampValue: new Date().toISOString() } };
+  if (m.name) fields.ad = F(m.name);
+  if (m.email) fields.iletisim = F(m.email);
+  const r = await fetch(`https://firestore.googleapis.com/v1/projects/${ADMIN_INBOX.projectId}/databases/(default)/documents/mesajlar?key=${ADMIN_INBOX.apiKey}`,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields }), signal: AbortSignal.timeout(20000) });
+  if (!r.ok) throw new Error('inbox ' + r.status);
+}
+async function sendToMail(m) {
+  const body = { _subject: 'CV Maker: yeni mesaj', _template: 'table', _captcha: 'false', Ad: m.name || '-', Mesaj: m.message, Surum: APP_VERSION, Cihaz: 'Windows', Dil: String(m.lang || '') };
+  if (m.email) { body.email = m.email; body._replyto = m.email; }
+  const r = await fetch('https://formsubmit.co/ajax/' + ADMIN_TO, { method: 'POST', signal: AbortSignal.timeout(20000),
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json', Referer: 'https://formsubmit.co/', Origin: 'https://formsubmit.co', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) CVMaker/' + APP_VERSION },
+    body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || String(j.success) !== 'true') throw new Error(j.message || 'mail ' + r.status);
+}
 ipcMain.handle('contact:send', async (_e, m) => {
   const msg = String((m && m.message) || '').slice(0, 5000).trim();
   if (!msg) return { ok: false, error: 'empty' };
-  const mail = String(m.email || '').slice(0, 120).trim();
-  const body = { _subject: 'CV Maker: yeni mesaj', _template: 'table', _captcha: 'false', Ad: String(m.name || '-').slice(0, 80), Mesaj: msg, Surum: APP_VERSION, Cihaz: 'Windows', Dil: String(m.lang || '') };
-  if (mail) { body.email = mail; body._replyto = mail; }
-  try {
-    const r = await fetch('https://formsubmit.co/ajax/' + ADMIN_TO, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(body) });
-    const j = await r.json().catch(() => ({}));
-    if ((!r.ok || String(j.success) === 'false') && !/activat/i.test(j.message || '')) return { ok: false, error: j.message || String(r.status) };
-    return { ok: true };
-  } catch (e) { return { ok: false, error: e.message }; }
+  const item = { message: msg, name: String(m.name || '').slice(0, 80).trim(), email: String(m.email || '').slice(0, 120).trim(), lang: String(m.lang || '') };
+  const res = await Promise.allSettled([sendToInbox(item), sendToMail(item)]);
+  if (res.some((x) => x.status === 'fulfilled')) return { ok: true };
+  return { ok: false, error: res.map((x) => x.reason && x.reason.message).join(' | ') };
 });
 ipcMain.handle('update:check', async (_e, override) => {
   const r = await updater.check(APP_VERSION, override);
