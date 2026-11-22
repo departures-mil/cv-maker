@@ -1,4 +1,9 @@
 {
+  "2.0.4": {
+    "tr": "Ayarlar'a «Kullanım Limitleri» bölümü eklendi: CV Maker sınırlı bir bulut ya da yapay zekâ hizmeti kullanmaz, kullanım sınırı yoktur.",
+    "en": "Settings now include «Usage limits»: CV Maker uses no limited cloud or AI service, so there is no usage limit.",
+    "ar": "أُضيف قسم «حدود الاستخدام» إلى الإعدادات: لا يستخدم CV Maker خدمة سحابية أو ذكاءً اصطناعياً محدوداً، فلا يوجد حد للاستخدام."
+  },
   "2.0.3": {
     "tr": "Admin duyuruları: yeni duyurular programda görünür, 🔔 düğmesinden tekrar okunur.",
     "en": "Admin announcements: new announcements appear in the program and can be re-read from the 🔔 button.",

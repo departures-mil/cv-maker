@@ -1109,6 +1109,7 @@ function openSettings() {
     h('h4', null, t('shortcuts')),
     h('div', { class: 'shortcuts' }, [['Ctrl+Z', t('undo')], ['Ctrl+Y', t('redo')], ['Ctrl+P', t('exportPdf')], ['F11', t('toggleFullscreen')]].map(([k, v]) =>
       h('div', null, h('kbd', null, k), ' ', v))),
+    window.Kullanim ? Kullanim.kart() : '',
     h('h4', null, t('contactAdmin')),
     h('div', { class: 'muted small' }, t('contactInfo')),
     contactForm(),
