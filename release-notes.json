@@ -1,4 +1,9 @@
 {
+  "2.0.3": {
+    "tr": "Admin duyuruları: yeni duyurular programda görünür, 🔔 düğmesinden tekrar okunur.",
+    "en": "Admin announcements: new announcements appear in the program and can be re-read from the 🔔 button.",
+    "ar": "إعلانات المدير: تظهر الإعلانات الجديدة في البرنامج ويمكن قراءتها مجددًا من زر 🔔."
+  },
   "2.0.0": {
     "tr": "Kurulumlu sürüme geçiş: masaüstü ve Başlat menüsü kısayolu. Eski kayıtlar otomatik aktarılır. Otomatik günlük yedek, yedekten geri yükleme ve eski verileri içe aktarma eklendi.",
     "en": "Moves to the installed edition with desktop and Start menu shortcuts. Old records are moved over automatically. Added automatic daily backups, restore from backup and import of old data.",
