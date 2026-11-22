@@ -1,4 +1,9 @@
 {
+  "2.0.5": {
+    "tr": "«Admin ile iletişime geç» düzeltildi: mesajlar artık yöneticinin mesaj kutusuna ve e-postasına güvenilir biçimde ulaşıyor.",
+    "en": "«Contact the admin» fixed: messages now reliably reach the administrator's inbox and e-mail.",
+    "ar": "تم إصلاح «التواصل مع المسؤول»: تصل الرسائل الآن بشكل موثوق إلى صندوق رسائل المسؤول وبريده الإلكتروني."
+  },
   "2.0.4": {
     "tr": "Ayarlar'a «Kullanım Limitleri» bölümü eklendi: CV Maker sınırlı bir bulut ya da yapay zekâ hizmeti kullanmaz, kullanım sınırı yoktur.",
     "en": "Settings now include «Usage limits»: CV Maker uses no limited cloud or AI service, so there is no usage limit.",
