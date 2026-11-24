@@ -1,7 +1,7 @@
 {
   "name": "cv-maker",
   "productName": "CV Maker",
-  "version": "2.0.6",
+  "version": "2.0.7",
   "description": "CV Maker",
   "main": "boot.js",
   "private": true,
@@ -30,7 +30,6 @@
     "files": [
       "boot.js",
       "main.js",
-      "fc-agent-main.js",
       "preload.js",
       "lib/**",
       "src/**",
