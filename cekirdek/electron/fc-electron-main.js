@@ -79,6 +79,25 @@ function cleanup(o, delayMs) {
 }
 
 /* ---------- pencere ---------- */
+/* ---------- kurulum kanalı (win-setup) ----------
+   updater.plan minVersion/setupChannel ile 'win-setup' kanalını seçtiğinde
+   installFull kurulum exe'sini getirir; çekirdek bunu app.asar.next olarak yazıp takas ediyordu (program bozulurdu).
+   Burada exe SHA-256 ile doğrulanır, geçici klasöre yazılır, ayrık süreç olarak açılır ve program kapanır. */
+function isSetup(meta) { return !!(meta && (/setup/i.test(String(meta.channel || '')) || /\.exe$/i.test(String(meta.file || '')))); }
+function runSetup(buf, meta) {
+  if (process.platform !== 'win32') throw err('SETUP_WINDOWS_ONLY');
+  if (!meta || !meta.targetSha256 || sha(buf) !== String(meta.targetSha256).toLowerCase()) throw err('BAD_HASH');
+  if (meta.targetSize && buf.length !== +meta.targetSize) throw err('BAD_SIZE');
+  const name = String(meta.file || 'setup.exe').replace(/[^\w.-]/g, '_');
+  const dir = path.join(os.tmpdir(), 'fc-setup-' + process.pid); ofs.mkdirSync(dir, { recursive: true });
+  const exe = path.join(dir, /\.exe$/i.test(name) ? name : name + '.exe');
+  ofs.writeFileSync(exe, buf);
+  if (sha(ofs.readFileSync(exe)) !== sha(buf)) throw err('STAGE_VERIFY');
+  spawn(exe, [], { detached: true, stdio: 'ignore', windowsHide: false }).unref();
+  setTimeout(() => app.exit(0), 400);
+  return 'restarting';
+}
+
 function install(win, opts) {
   const o = Object.assign({ channel: 'win-app' }, opts || {});
   const applyDelta = o.applyDelta || applyFcd1;
@@ -116,7 +135,11 @@ function install(win, opts) {
     const st = stage(o, out, meta);
     swapAndRelaunch(o, st); return 'restarting';
   }));
-  handle('fc:update:full', result((_e, bytes, meta) => { const st = stage(o, Buffer.from(bytes), meta); swapAndRelaunch(o, st); return 'restarting'; }));
+  handle('fc:update:full', result((_e, bytes, meta) => {
+    // Kurulum kanalı (win-setup: NSIS exe) app.asar'ın yerine YAZILMAZ; doğrulanıp çalıştırılır.
+    if (isSetup(meta)) return runSetup(Buffer.from(bytes), meta);
+    const st = stage(o, Buffer.from(bytes), meta); swapAndRelaunch(o, st); return 'restarting';
+  }));
   handle('fc:net:download', async (e, id, url) => {
     const u = new URL(String(url));
     if (u.protocol !== 'https:' || !ALLOWED_HOSTS.test(u.hostname)) throw err('URL_NOT_ALLOWED');
