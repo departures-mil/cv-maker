@@ -86,6 +86,7 @@ jobs:
       version: ${{ needs.build.outputs.version }}
       file_prefix: CV-Maker
       release_title: CV Maker v${{ needs.build.outputs.version }}
+      min_version: 2.1.2
       files: |
         win-app=app.asar
         win-setup=*Setup*.exe=CV-Maker-Setup-{version}.exe
