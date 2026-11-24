@@ -4,6 +4,16 @@
     "en": "- New look (Falcon Ofis) with a colour scheme picker in Settings → Appearance; the 2.0 colours are kept as the \"Classic\" scheme\n- Dark/light/automatic mode and text size (A− / A+); embedded Noto Sans Arabic font for Arabic\n- Top right: Sync, Update, theme and language; Minimise, Half, Full screen, Close. The program opens full screen every time\n- One-click updates: only the changed parts are downloaded, with percentage, downloaded/remaining MB and speed. A backup is made before every update\n- Installer in Turkish, English and Arabic; one-click install\n- \"Contact the admin\" at the end of Settings; optional automatic error reports; \"What's new\" and a first-start guide\n- \"Inter + Noto Sans Arabic\" can be chosen as the CV font (embedded in the PDF)\n- Your CVs, attachments and backups stay where they are",
     "ar": "- مظهر جديد (Falcon Ofis) مع منتقي أنظمة الألوان في الإعدادات ← المظهر؛ ألوان الإصدار 2.0 محفوظة في نظام \"الكلاسيكي\"\n- وضع داكن/فاتح/تلقائي وحجم الخط (A− / A+)؛ خط Noto Sans Arabic مضمَّن للعربية\n- في الأعلى: المزامنة والتحديث والمظهر واللغة؛ تصغير، نصف الشاشة، ملء الشاشة، إغلاق. يفتح البرنامج بملء الشاشة في كل مرة\n- تحديث بضغطة واحدة: تُنزَّل الأجزاء المتغيرة فقط مع النسبة والميغابايت المنزّلة/المتبقية والسرعة. تُؤخذ نسخة احتياطية قبل كل تحديث\n- مثبّت بالتركية والإنجليزية والعربية؛ تثبيت بنقرة واحدة\n- «التواصل مع المسؤول» في آخر الإعدادات؛ تقارير أخطاء تلقائية اختيارية؛ «ما الجديد» ودليل التشغيل الأول\n- يمكن اختيار «Inter + Noto Sans Arabic» خطاً للسيرة الذاتية (يُضمَّن في ملف PDF)\n- تبقى سيرك الذاتية ومرفقاتها ونسخها الاحتياطية في مكانها"
   },
+  "2.0.7": {
+    "tr": "Asistan Agent iyileştirildi: ayarlardaki kart yerleşimi ve bilgisayardaki diğer programlarla ortak çalışma kaydı.",
+    "en": "Assistant Agent improved: settings card placement and shared activity with other programs on this computer.",
+    "ar": "تحسين الوكيل المساعد: موضع البطاقة في الإعدادات والسجل المشترك مع البرامج الأخرى على هذا الحاسوب."
+  },
+  "2.0.6": {
+    "tr": "Yeni: ✦ Asistan Agent — bütün programlarınızdaki çalışmanızı izler ve daha verimli çalışmanız için öneriler verir (bildirim + program içi panel). Ayarlar'dan açılıp kapatılabilir.",
+    "en": "New: ✦ Assistant Agent — follows your work across all your programs and suggests how to work more effectively (notifications + in-app panel). Can be turned on/off in Settings.",
+    "ar": "جديد: ✦ الوكيل المساعد — يتابع عملك في جميع برامجك ويقترح طرقاً للعمل بكفاءة أكبر (إشعارات + لوحة داخل البرنامج). يمكن تشغيله أو إيقافه من الإعدادات."
+  },
   "2.0.5": {
     "tr": "«Admin ile iletişime geç» düzeltildi: mesajlar artık yöneticinin mesaj kutusuna ve e-postasına güvenilir biçimde ulaşıyor.",
     "en": "«Contact the admin» fixed: messages now reliably reach the administrator's inbox and e-mail.",
