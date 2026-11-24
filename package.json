@@ -1,15 +1,17 @@
 {
   "name": "cv-maker",
   "productName": "CV Maker",
-  "version": "2.0.5",
+  "version": "2.1.0",
   "description": "CV Maker",
-  "main": "boot.js",
+  "main": "main.js",
   "private": true,
   "scripts": {
     "start": "electron .",
     "build": "node scripts/build.js",
-    "release": "node scripts/release.js",
-    "test": "node test/datastore.test.js"
+    "eski-kanal": "node tools/eski-kanal.js",
+    "ekran": "node tools/ekran.js",
+    "test": "node test/datastore.test.js && node --test test/main.smoke.test.js test/eski-kanal.test.js test/cekirdek.test.js test/electron.smoke.test.js",
+    "test:electron": "node --test test/electron.smoke.test.js"
   },
   "dependencies": {
     "docx": "^9.14.0",
@@ -20,7 +22,7 @@
     "electron": "^38.8.6",
     "electron-builder": "^26.18.0"
   },
-  "author": "CV Maker",
+  "author": "departures-mil",
   "build": {
     "appId": "com.cvmaker.desktop",
     "productName": "CV Maker",
@@ -28,13 +30,13 @@
       "output": "dist"
     },
     "files": [
-      "boot.js",
       "main.js",
       "preload.js",
       "lib/**",
       "src/**",
+      "cekirdek/**",
       "build/icon.png",
-      "update-config.json",
+      "release-notes.json",
       "package.json",
       "!**/*.map",
       "!node_modules/pdfjs-dist/{legacy,web,types,image_decoders,lib}/**",
@@ -49,15 +51,15 @@
           ]
         }
       ],
-      "icon": "build/icon.ico"
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": true
     },
     "compression": "normal",
     "publish": null,
     "nsis": {
-      "oneClick": false,
+      "oneClick": true,
       "perMachine": false,
-      "allowElevation": true,
-      "allowToChangeInstallationDirectory": true,
+      "allowElevation": false,
       "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,
       "shortcutName": "CV Maker",
@@ -65,15 +67,17 @@
       "deleteAppDataOnUninstall": false,
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico",
+      "multiLanguageInstaller": true,
+      "installerLanguages": [
+        "tr_TR",
+        "en_US",
+        "ar_SA"
+      ],
       "language": "1055",
-      "multiLanguageInstaller": false,
       "artifactName": "CV-Maker-Setup-${version}.${ext}",
       "uninstallDisplayName": "CV Maker",
       "include": "build/installer.nsh"
-    }
-  },
-  "cvmaker": {
-    "minShell": "1.3.0",
-    "githubRepo": "departures-mil/cv-maker"
+    },
+    "asar": true
   }
 }

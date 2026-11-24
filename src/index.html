@@ -2,14 +2,18 @@
 <html lang="tr">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; worker-src 'self' blob:; connect-src 'self' data: blob: https://raw.githubusercontent.com">
+  <meta name="color-scheme" content="dark">
+  <!-- connect-src: admin gelen kutusu + yedek e-posta (çekirdek iletişim/çökme), duyurular, kullanıcının kendi AI anahtarıyla Asistan Agent önerileri.
+       Güncelleme dosyaları ana süreçte indirilir (fcHost.net). -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'; worker-src 'self' blob:; connect-src 'self' data: blob: https://raw.githubusercontent.com https://github.com https://firestore.googleapis.com https://formsubmit.co https://generativelanguage.googleapis.com https://api.openai.com https://api.anthropic.com https://api.groq.com">
   <title>CV Maker</title>
+  <link rel="stylesheet" href="cekirdek/css/tokens.css">
+  <link rel="stylesheet" href="cekirdek/css/core.css">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div id="update-banner" class="update-banner" hidden></div>
-  <header class="topbar">
-    <div class="brand"><span class="logo">CV</span><span id="app-title">CV Maker</span></div>
+  <header class="topbar cv-topbar" id="topbar">
+    <div class="cv-brand"><span class="logo">CV</span><span id="app-title">CV Maker</span><span class="version-badge ltr" id="ver-badge"></span></div>
     <div class="tb-group">
       <select id="cv-select" class="tb-select"></select>
       <button class="tb-btn" id="btn-cv-menu" data-i18n-title="cvMenu">☰</button>
@@ -20,19 +24,10 @@
     </div>
     <div class="tb-spacer"></div>
     <div class="tb-group">
-      <select id="lang-select" class="tb-select">
-        <option value="tr">Türkçe</option>
-        <option value="en">English</option>
-        <option value="ar">العربية</option>
-      </select>
       <button class="tb-btn primary" id="btn-export"><span data-i18n="export"></span> ▾</button>
       <button class="tb-btn icon" id="btn-settings" data-i18n-title="settings">⚙</button>
     </div>
-    <div class="tb-group win">
-      <button class="tb-btn icon" id="btn-fullscreen" data-i18n-title="toggleFullscreen">⛶</button>
-      <button class="tb-btn icon" id="btn-min" data-i18n-title="minimize">—</button>
-      <button class="tb-btn icon danger" id="btn-close" data-i18n-title="close">✕</button>
-    </div>
+    <!-- sağ: ortak çekirdek sırası (FC.topbar): 🔔 · ✦ · Eşitle · Güncelle · Tema · Dil | Küçült · Orta · Tam ekran · Kapat -->
   </header>
 
   <div class="workspace">
@@ -60,19 +55,15 @@
     </section>
   </div>
 
-  <div id="modal-root"></div>
   <div id="menu-root"></div>
-  <div id="toast-root" class="toast-root"></div>
 
   <script src="../node_modules/pdfjs-dist/build/pdf.min.js"></script>
+  <script src="cekirdek/fc-core.js"></script>
   <script src="i18n.js"></script>
   <script src="schema.js"></script>
   <script src="samples.js"></script>
   <script src="render.js"></script>
+  <script src="kabuk.js"></script>
   <script src="app.js"></script>
-  <script src="duyuru.js"></script>
-  <script src="duyuru-baslat.js"></script>
-  <script src="kullanim.js"></script>
-  <script src="kullanim-baslat.js"></script>
 </body>
 </html>

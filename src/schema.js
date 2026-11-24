@@ -173,6 +173,8 @@ const SECTION_TYPES = {
 
 const FONTS = {
   segoe: { label: 'Segoe UI', css: "'Segoe UI', 'Noto Sans', Tahoma, Arial, sans-serif", docx: 'Segoe UI' },
+  // Ortak çekirdeğin gömülü yazı tipleri (Latin: Inter, Arapça: Noto Sans Arabic) — her bilgisayarda aynı görünür; PDF'e gömülür.
+  inter: { label: 'Inter + Noto Sans Arabic', css: "Inter, 'Noto Sans Arabic', 'Segoe UI', Tahoma, sans-serif", docx: 'Segoe UI' },
   calibri: { label: 'Calibri', css: "Calibri, Carlito, 'Segoe UI', Tahoma, sans-serif", docx: 'Calibri' },
   arial: { label: 'Arial', css: "Arial, 'Liberation Sans', Tahoma, sans-serif", docx: 'Arial' },
   verdana: { label: 'Verdana', css: "Verdana, 'DejaVu Sans', Tahoma, sans-serif", docx: 'Verdana' },

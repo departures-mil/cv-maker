@@ -1,59 +1,120 @@
-# Builds the Windows installer and the small update bundle, and publishes them as a
-# GitHub release. Installed programs read
-#   https://github.com/departures-mil/cv-maker/releases/latest/download/latest.json
-# at start, so a new release reaches them automatically.
-# A release is made whenever package.json lands on main with a version that has no release yet.
-name: Build and release
+# CV Maker — test → Windows derlemesi (NSIS kurulum + app.asar) → GitHub Release (ortak çekirdek, delta yamalar) → eski kanal köprüsü.
+# Kurulu programlar açılışta https://github.com/departures-mil/cv-maker/releases/latest/download/latest.json okur:
+#   2.1.0+  ortak çekirdek güncelleyicisi (win-app = app.asar, yama varsa yalnız değişen kısımlar; gerekirse win-setup)
+#   2.0.x   kendi eski güncelleyicisi → "legacy" işinin latest.json'a eklediği installer alanlarıyla tam kurulumu bir kez alır
+# Yayın: package.json sürümünü artırın, release-notes.json'a o sürümün tr/en/ar notunu yazın, main'e gönderin
+# (ya da Actions → release → "Run workflow", main). Sürüm zaten yayınlandıysa release atlanır. Etiket vX.Y.Z release ile oluşur.
+# Entegrasyon dallarında (ortak-cekirdek-*) yalnız test + derleme çalışır. Testler geçmezse derleme ve yayın olmaz.
+name: release
 on:
   push:
-    branches: [main]
-    paths: ['package.json']
+    branches: [main, 'ortak-cekirdek-*']
+    tags: ['v*']
   workflow_dispatch:
 
 permissions:
   contents: write
 
-concurrency: release
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  release:
-    runs-on: windows-latest
+  test:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Read version
-        id: v
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          VER=$(node -p "require('./package.json').version")
-          echo "ver=$VER" >> "$GITHUB_OUTPUT"
-          if gh release view "v$VER" >/dev/null 2>&1; then echo "exists=1" >> "$GITHUB_OUTPUT"; fi
-
       - uses: actions/setup-node@v4
-        if: steps.v.outputs.exists != '1'
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install
-        if: steps.v.outputs.exists != '1'
-        run: npm ci
-
-      - name: Test
-        if: steps.v.outputs.exists != '1'
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - name: Electron için sistem kitaplıkları
+        run: sudo apt-get update -q && (sudo apt-get install -y -q xvfb libnss3 libgbm1 libasound2t64 libgtk-3-0 >/dev/null || sudo apt-get install -y -q xvfb libnss3 libgbm1 libgtk-3-0)
+      - name: npm test (veri deposu + ana süreç + eski kanal köprüsü + çekirdek + Electron açılış testi, xvfb)
         run: npm test
+      - name: Etiket = package.json sürümü
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          v="$(node -p "require('./package.json').version")"
+          [ "v$v" = "${GITHUB_REF_NAME}" ] || { echo "::error::etiket ${GITHUB_REF_NAME} ≠ package.json v$v"; exit 1; }
 
-      - name: Build installer and bundle
-        if: steps.v.outputs.exists != '1'
-        run: node scripts/release.js
+  build:
+    needs: test
+    runs-on: windows-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      notes: ${{ steps.ver.outputs.notes }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - id: ver
+        shell: bash
+        run: |
+          set -euo pipefail
+          v="$(node -p "require('./package.json').version")"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          # release-notes.json sürüm anahtarlıdır; bu sürümün notu zorunlu (tr/en/ar)
+          echo "notes=$(node -e "const n=require('./release-notes.json')['$v']; if(!n||!n.tr||!n.en||!n.ar){console.error('release-notes.json: $v için tr/en/ar notu yok');process.exit(1)} process.stdout.write(JSON.stringify(n))")" >> "$GITHUB_OUTPUT"
+      - name: NSIS kurulum + app.asar
+        run: npx electron-builder --win nsis --x64 --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Yayınlanacak dosyaları topla
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir release
+          cp dist/win-unpacked/resources/app.asar release/app.asar
+          cp dist/*Setup*.exe release/
+          ls -la release
+          sha256sum release/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-win
+          path: release/
+          retention-days: 5
 
-      - name: Publish GitHub release
-        if: steps.v.outputs.exists != '1'
+  release:
+    needs: [test, build]
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    uses: departures-mil/ortak-cekirdek/.github/workflows/reusable-release.yml@main
+    with:
+      app_id: cv-maker
+      version: ${{ needs.build.outputs.version }}
+      file_prefix: CV-Maker
+      release_title: CV Maker v${{ needs.build.outputs.version }}
+      files: |
+        win-app=app.asar
+        win-setup=*Setup*.exe=CV-Maker-Setup-{version}.exe
+      notes_tr: ${{ fromJSON(needs.build.outputs.notes).tr }}
+      notes_en: ${{ fromJSON(needs.build.outputs.notes).en }}
+      notes_ar: ${{ fromJSON(needs.build.outputs.notes).ar }}
+      core_ref: main
+
+  # Eski kanal köprüsü: 2.0.x güncelleyicisinin okuduğu alanlar (installer, url, sha256…) latest.json'a eklenir.
+  # Her sürümde çalışır (henüz güncellemeyen 2.0.x kurulumları da her zaman en son sürümü alabilsin). Zaten varsa dokunmaz.
+  legacy:
+    needs: [build, release]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: tools
+      - name: latest.json'a eski alanları ekle
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          VER: ${{ steps.v.outputs.ver }}
+          TAG: v${{ needs.build.outputs.version }}
         run: |
-          gh release create "v${VER}" dist/release/* --target "$GITHUB_SHA" --title "CV Maker v${VER%.*}" --notes-file dist/release-notes.md --latest
+          set -euo pipefail
+          mkdir -p legacy && cd legacy
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" -p latest.json --clobber
+          if node ../tools/eski-kanal.js --check latest.json; then echo "eski alanlar zaten var"; exit 0; fi
+          node ../tools/eski-kanal.js latest.json "$GITHUB_REPOSITORY"
+          node ../tools/eski-kanal.js --check latest.json
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" latest.json --clobber
+          echo "### Eski kanal (2.0.x) köprüsü" >> "$GITHUB_STEP_SUMMARY"
+          node -e "const m=require('./latest.json');console.log('installer: '+m.installer.fileName+' · '+(m.installer.size/1048576).toFixed(1)+' MB')" >> "$GITHUB_STEP_SUMMARY"

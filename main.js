@@ -1,28 +1,29 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, dialog, shell, Menu, Notification } = require('electron');
+// CV Maker — Electron ana süreç.
+// Pencere (her açılışta tam ekran, çerçevesiz), sağ üst pencere düğmeleri, GitHub Releases güncellemesi (yama + tam app.asar)
+// ve ana süreç hata raporu ortak çekirdekten gelir (cekirdek/electron/fc-electron-main.js). Burada yalnız CV Maker'a özgü IPC kalır.
+// Kullanıcı verisi: %APPDATA%\CV Maker\data (2.0.x ile aynı yer; güncelleme ve kurulum dokunmaz).
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const crypto = require('crypto');
-const { spawn } = require('child_process');
+const fc = require('./cekirdek/electron/fc-electron-main');
 const { buildPdf } = require('./lib/pdf');
 const { buildDocx } = require('./lib/docx');
-const updater = require('./lib/updater');
 const { DataStore } = require('./lib/datastore');
 
 const APP_NAME = 'CV Maker';
-// Version of the code that is running (an update bundle can be newer than the .exe).
-const APP_VERSION = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8')).version;
-const SHELL_VERSION = app.getVersion();
-const [MAJOR, MINOR] = APP_VERSION.split('.');
-const DISPLAY_VERSION = `${MAJOR}.${MINOR}`;
-const TITLE = `${APP_NAME} v${DISPLAY_VERSION}`;
+const APP_VERSION = app.getVersion();
+const TITLE = APP_NAME;
+const SMOKE = !!process.env.CVM_SMOKE;
+const FONT_INTER = "Inter, 'Noto Sans Arabic', 'Segoe UI', Tahoma, sans-serif";   // src/schema.js FONTS.inter (smoke testi)
 
 app.setName(APP_NAME);
 
 // Installed edition (setup): data lives in %APPDATA%\CV Maker\data.
-// The old portable edition kept it next to the .exe ("CV Maker Data"); it is still supported
-// so that a portable copy can move itself over to the installed edition (see update:apply).
+// The old portable edition (1.x) kept it next to the .exe ("CV Maker Data"); its records are imported at the first
+// start of the installed edition (below) and from Settings → Data. PORTABLE_EXECUTABLE_DIR is only set by 1.x portable builds.
 const PORTABLE_DIR = process.env.PORTABLE_EXECUTABLE_DIR;
 const INSTALLED_USERDATA = path.join(app.getPath('appData'), APP_NAME);
 const MIGRATE_FILE = path.join(INSTALLED_USERDATA, 'migrate-from.json');
@@ -81,99 +82,95 @@ if (process.platform === 'win32') app.setAppUserModelId('com.cvmaker.desktop');
 
 let win;
 
-
 function createWindow() {
-  win = new BrowserWindow({
+  win = new BrowserWindow(fc.windowOptions({
     title: TITLE,
-    fullscreen: true,
-    autoHideMenuBar: true,
-    backgroundColor: '#0f172a',
+    minWidth: 640, minHeight: 400,   // "Orta" = çalışma alanının yarısı; küçük ekranlarda da sığsın
+    backgroundColor: '#070b14',
     icon: path.join(__dirname, 'build', 'icon.png'),
-    show: false,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      spellcheck: false,
-    },
-  });
+    // sandbox:false (windowOptions) → preload ortak çekirdeğin fc-preload.js'ini require edebilir; contextIsolation açık kalır
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), spellcheck: false },
+  }));
+  fc.install(win, { channel: 'win-app' });
   Menu.setApplicationMenu(null);
   win.on('page-title-updated', (e) => e.preventDefault());
-  win.once('ready-to-show', () => {
-    win.setFullScreen(true);
-    win.show();
-    if (global.__CVM_MARK_OK) global.__CVM_MARK_OK();
-  });
   win.webContents.on('before-input-event', (_e, input) => {
     if (input.type === 'keyDown' && input.key === 'F11') win.setFullScreen(!win.isFullScreen());
     if (input.type === 'keyDown' && input.key === 'F12' && !app.isPackaged) win.webContents.toggleDevTools();
   });
-  win.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: 'deny' }; });
-  win.on('enter-full-screen', () => win.webContents.send('window:fullscreen', true));
-  win.on('leave-full-screen', () => win.webContents.send('window:fullscreen', false));
+  win.webContents.setWindowOpenHandler(({ url }) => { if (/^https:\/\//i.test(url)) shell.openExternal(url); return { action: 'deny' }; });
+  win.webContents.on('will-navigate', (e, url) => { if (!url.startsWith('file:')) { e.preventDefault(); if (/^https:\/\//i.test(url)) shell.openExternal(url); } });
   win.loadFile(path.join(__dirname, 'src', 'index.html'));
+  if (SMOKE) smoke();
 }
 
-// After a one-click update the new .exe is started with --cleanup-old=<previous exe>.
-const cleanupArg = process.argv.find((a) => a.startsWith('--cleanup-old='));
-const cleanupOld = cleanupArg ? cleanupArg.slice('--cleanup-old='.length) : '';
-const afterUpdate = !!cleanupOld || process.argv.includes('--after-update');
-function removeOldExe(tries = 0) {
-  if (!cleanupOld || cleanupOld === process.env.PORTABLE_EXECUTABLE_FILE) return;
-  fs.unlink(cleanupOld, (err) => {
-    if (!err || err.code === 'ENOENT') return updateLog('removed ' + cleanupOld);
-    if (tries < 60) setTimeout(() => removeOldExe(tries + 1), 1000);
-    else updateLog('could not remove ' + cleanupOld + ': ' + err.code);
+// Electron açılış testi (test/electron.smoke.test.js): pencere yüklendi mi, çekirdek ve düzenleyici başladı mı?
+function smoke() {
+  const out = (o) => process.stdout.write('CVM_SMOKE ' + JSON.stringify(o) + '\n');
+  const consoleErrors = [];
+  win.webContents.on('console-message', (e, level, message) => { if (level >= 3) consoleErrors.push(String(message).slice(0, 300)); });
+  const fail = setTimeout(() => { out({ ok: false, error: 'timeout' }); app.exit(2); }, 60000);
+  win.webContents.on('did-finish-load', () => {
+    setTimeout(async () => {
+      try {
+        const r = await win.webContents.executeJavaScript(`({
+          fc: !!(window.FC && FC.updater && FC.topbar && FC.settings), host: window.FC && FC.host.kind, fcHost: !!window.fcHost, api: !!window.api,
+          version: window.FC && FC.updater.state().current, scheme: document.documentElement.dataset.scheme, schemes: FC.look.schemes(),
+          topbar: !!document.querySelector('#topbar .topbar-actions'), winBtns: document.querySelectorAll('#topbar .win-controls button').length,
+          update: !!document.querySelector('#topbar .update-act'), sections: document.querySelectorAll('#editor .ed-card').length,
+          preview: !!document.querySelector('#preview-sheet .cv'), lang: document.documentElement.lang, title: document.title,
+          errors: (window.__cvmErrors || []).slice(0, 5)
+        })`);
+        // ayarlar açılır, iletişim kartı en sonda mı?
+        r.settings = await win.webContents.executeJavaScript(`(function () { openSettings(); var g = document.querySelector('.cv-settings .settings-grid'); var c = g ? [].map.call(g.children, function (x) { return x.getAttribute('data-fc-card') || x.id || ''; }) : []; document.querySelector('.cv-settings .modal-header .icon-btn').click(); return c; })()`);
+        // CV yazı tipi "Inter + Noto Sans Arabic": çekirdeğin gömülü yazı tipleri PDF'e girer mi?
+        const pdf = Buffer.from(await buildPdf(`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><style>.cv{font-family:var(--font)}</style></head><body><div class="cv" style="--font:${FONT_INTER}">مرحبا بكم — Ayşe Yılmaz</div></body></html>`, []));
+        r.pdfFonts = (pdf.toString('latin1').match(/\/BaseFont\s*\/[A-Z]{6}\+([A-Za-z-]+)/g) || []).map((x) => x.replace(/.*\+/, '')).filter((x, i, a) => a.indexOf(x) === i);
+        r.fullscreen = win.isFullScreen(); r.appVersion = app.getVersion();
+        r.errors = r.errors.concat(consoleErrors.filter((m) => !/net::|Failed to load resource|ERR_/.test(m)));
+        clearTimeout(fail);
+        out(Object.assign({ ok: r.fc && r.host === 'electron' && r.topbar && r.sections > 0 && r.preview && !r.errors.length }, r));
+        app.exit(0);
+      } catch (e) { out({ ok: false, error: String((e && e.message) || e) }); app.exit(3); }
+    }, 3500);
   });
 }
 
-// The previous version may still be closing; wait for the single-instance lock instead of quitting.
+// Tek kopya: ikinci açılış mevcut pencereyi öne getirir (iki pencerenin aynı veri dosyalarına yazması önlenir).
+// Güncellemeden sonraki yeniden açılışta eski süreç kapanırken kilidi kısa süre bekler.
 async function acquireLock() {
-  for (let i = 0; i < (afterUpdate ? 40 : 1); i++) {
+  if (SMOKE) return true;
+  for (let i = 0; i < 10; i++) {
     if (app.requestSingleInstanceLock()) return true;
+    if (!process.argv.some((a) => a === '--updated' || a === '--after-update')) return false;
     await new Promise((r) => setTimeout(r, 500));
   }
   return false;
 }
-app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
+app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); } });
 app.whenReady().then(async () => {
   if (!(await acquireLock())) return app.quit();
   createWindow();
-  removeOldExe();
 });
 app.on('window-all-closed', () => app.quit());
 
 // ---------- app info / window ----------
+function releaseNotes() {
+  try { return JSON.parse(fs.readFileSync(path.join(__dirname, 'release-notes.json'), 'utf8'))[APP_VERSION] || null; } catch { return null; }
+}
 ipcMain.handle('app:info', () => ({
   name: APP_NAME,
   version: APP_VERSION,
-  shellVersion: SHELL_VERSION,
-  displayVersion: DISPLAY_VERSION,
   title: TITLE,
+  notes: releaseNotes(),
   portable: !!PORTABLE_DIR,
   dataDir: DATA_DIR,
   backupDir: store.backupDir,
-  afterUpdate,
   migration: MIGRATION,
   platform: process.platform,
+  packaged: app.isPackaged,
 }));
-ipcMain.on('window:minimize', () => win && win.minimize());
-ipcMain.on('window:close', () => win && win.close());
-ipcMain.on('window:toggleFullscreen', () => win && win.setFullScreen(!win.isFullScreen()));
-ipcMain.handle('window:isFullscreen', () => !!(win && win.isFullScreen()));
 ipcMain.on('app:openDataDir', () => shell.openPath(DATA_DIR));
-ipcMain.on('app:notify', (_e, { title, body }) => {
-  if (!Notification.isSupported()) return;
-  const n = new Notification({ title, body, icon: path.join(__dirname, 'build', 'icon.png') });
-  n.on('click', () => {
-    if (!win) return;
-    if (win.isMinimized()) win.restore();
-    win.show();
-    win.focus();
-    win.webContents.send('app:notifyClick');
-  });
-  n.show();
-});
 
 // ---------- storage ----------
 ipcMain.handle('store:load', () => ({ cvs: store.loadCvs(), settings: store.loadSettings() }));
@@ -185,6 +182,8 @@ ipcMain.on('store:saveSettingsSync', (e, data) => { try { store.saveSettings(dat
 // ---------- backups / import of old data ----------
 ipcMain.handle('backup:list', () => store.listBackups());
 ipcMain.handle('backup:create', () => store.backup('manual'));
+// Güncelleme indirilmeye başlayınca arayüz çağırır (2.0.x'te update:apply yapıyordu): sürüm değişmeden önce tam yedek.
+ipcMain.handle('backup:beforeUpdate', (_e, to) => { const r = store.backup('before-update', { to: String(to || '') }); updateLog(`backup before update to ${to}`); return r; });
 ipcMain.handle('backup:restore', (_e, name) => {
   const r = store.restoreBackup(name);
   updateLog(`restored backup ${name} (safety copy ${r.safety})`);
@@ -324,155 +323,10 @@ ipcMain.handle('jpeg:save', (_e, { target, images, open }) => {
   return { paths, dir };
 });
 
-// ---------- updates ----------
-// Kinds of update (all announced in latest.json of the newest GitHub release, see update-config.json):
-//  * bundle:    only the app's own files (~1 MB), unpacked into <data>/app/<version>
-//               and picked up by boot.js on the next start.
-//  * installer: the full setup ("CV Maker Setup x.y.exe"), run silently; used when the
-//               Electron shell itself changes (manifest.bundle.minShell newer than this shell).
-//  * portable -> installed: a portable copy downloads the setup, leaves a note where its
-//               data is, installs and the installed edition imports the data on first start.
-const BUNDLE_ROOT = path.join(DATA_DIR, 'app');
-function canUseBundle(m) {
-  if (PORTABLE_DIR && m && m.installer) return false; // portable copies move to the installed edition
-  return !!(m && m.bundle && m.bundle.url && fs.existsSync(path.join(global.__CVM_BASE || __dirname, 'boot.js'))
-    && updater.cmp(SHELL_VERSION, m.bundle.minShell || '999') >= 0);
-}
-// Messages to the administrator (v2.0.5): two independent channels, the message counts as delivered
-// when at least one of them accepts it.
-//  1) Admin inbox — Firestore "mesajlar" collection of the admin's project (create-only rules; nobody can read it
-//     except the admin in the Firebase console). Works from any network/app, no activation needed.
-//  2) E-mail copy via FormSubmit. FormSubmit rejects requests without a Referer and needs a one-time activation
-//     per sending site, so the request carries the site that is already activated.
-const ADMIN_TO = Buffer.from('bW9jLmxpYW1ub3RvcnBANDMyMWxkaW50bWxkYmE=', 'base64').toString().split('').reverse().join('');
-const ADMIN_INBOX = { projectId: 'comm-calc-103111111', apiKey: 'AIzaSyB12RFS6ENPpmnnPsETfjedNH-3hmNWQvA' };
-async function sendToInbox(m) {
-  const F = (v) => ({ stringValue: String(v || '').slice(0, 4000) });
-  const fields = { mesaj: F(m.message), konu: F('CV Maker · Mesaj'), dil: F(m.lang), surum: F(APP_VERSION), platform: F('CV Maker · Windows'), zaman: { timestampValue: new Date().toISOString() } };
-  if (m.name) fields.ad = F(m.name);
-  if (m.email) fields.iletisim = F(m.email);
-  const r = await fetch(`https://firestore.googleapis.com/v1/projects/${ADMIN_INBOX.projectId}/databases/(default)/documents/mesajlar?key=${ADMIN_INBOX.apiKey}`,
-    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields }), signal: AbortSignal.timeout(20000) });
-  if (!r.ok) throw new Error('inbox ' + r.status);
-}
-async function sendToMail(m) {
-  const body = { _subject: 'CV Maker: yeni mesaj', _template: 'table', _captcha: 'false', Ad: m.name || '-', Mesaj: m.message, Surum: APP_VERSION, Cihaz: 'Windows', Dil: String(m.lang || '') };
-  if (m.email) { body.email = m.email; body._replyto = m.email; }
-  const r = await fetch('https://formsubmit.co/ajax/' + ADMIN_TO, { method: 'POST', signal: AbortSignal.timeout(20000),
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json', Referer: 'https://formsubmit.co/', Origin: 'https://formsubmit.co', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) CVMaker/' + APP_VERSION },
-    body: JSON.stringify(body) });
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok || String(j.success) !== 'true') throw new Error(j.message || 'mail ' + r.status);
-}
-ipcMain.handle('contact:send', async (_e, m) => {
-  const msg = String((m && m.message) || '').slice(0, 5000).trim();
-  if (!msg) return { ok: false, error: 'empty' };
-  const item = { message: msg, name: String(m.name || '').slice(0, 80).trim(), email: String(m.email || '').slice(0, 120).trim(), lang: String(m.lang || '') };
-  const res = await Promise.allSettled([sendToInbox(item), sendToMail(item)]);
-  if (res.some((x) => x.status === 'fulfilled')) return { ok: true };
-  return { ok: false, error: res.map((x) => x.reason && x.reason.message).join(' | ') };
-});
-ipcMain.handle('update:check', async (_e, override) => {
-  const r = await updater.check(APP_VERSION, override);
-  if (r.ok && PORTABLE_DIR && r.manifest && r.manifest.installer) { r.available = true; r.migrate = true; }
-  return r;
-});
-ipcMain.handle('update:download', async (_e, manifest) => {
-  const progress = (p) => win && win.webContents.send('update:progress', p);
-  if (canUseBundle(manifest)) {
-    try {
-      const dir = await updater.downloadBundle(manifest, BUNDLE_ROOT, progress);
-      updateLog(`bundle ${manifest.version} unpacked to ${dir}`);
-      return { kind: 'bundle', version: manifest.version, path: dir };
-    } catch (e) {
-      updateLog('bundle failed, falling back to installer: ' + e.message);
-    }
-  }
-  if (manifest.installer) {
-    const dir = path.join(os.tmpdir(), 'cvmaker-update');
-    fs.mkdirSync(dir, { recursive: true });
-    const file = await updater.download(manifest.installer, dir, progress);
-    updateLog(`installer ${manifest.version} downloaded to ${file}`);
-    return { kind: 'installer', version: manifest.version, path: file, migrate: !!PORTABLE_DIR };
-  }
-  const targetDir = PORTABLE_DIR || app.getPath('downloads');
-  return updater.download(manifest, targetDir, progress);
-});
-function restartSelf(extraArgs) {
-  const exe = process.env.PORTABLE_EXECUTABLE_FILE;
-  if (exe) {
-    spawn(exe, extraArgs, { detached: true, stdio: 'ignore', cwd: path.dirname(exe) }).unref();
-  } else {
-    app.relaunch({ args: process.argv.slice(1).filter((a) => !a.startsWith('--cleanup-old=') && a !== '--after-update').concat(extraArgs) });
-  }
-  setTimeout(() => app.exit(0), 400);
-}
-ipcMain.handle('update:apply', (_e, target) => {
-  try { store.backup('before-update', { to: target && target.version }); } catch (e) { updateLog('backup before update failed: ' + e.message); }
-  if (target && typeof target === 'object' && target.kind === 'bundle') {
-    // Portable only: keep the .exe name in step with the version shown in the title.
-    const oldExe = process.env.PORTABLE_EXECUTABLE_FILE;
-    if (oldExe) {
-      const [ma, mi] = String(target.version).split('.');
-      const newExe = path.join(path.dirname(oldExe), `CV Maker v${ma}.${mi}.exe`);
-      if (newExe.toLowerCase() !== oldExe.toLowerCase() && !fs.existsSync(newExe)) {
-        try { fs.renameSync(oldExe, newExe); process.env.PORTABLE_EXECUTABLE_FILE = newExe; updateLog(`renamed ${oldExe} -> ${newExe}`); }
-        catch (e) { updateLog('rename skipped: ' + e.code); }
-      }
-    }
-    updateLog(`restart for bundle ${target.version}`);
-    try { restartSelf(['--after-update']); } catch (e) { updateLog('restart failed: ' + e.message); return { restarted: false, error: e.message }; }
-    return { restarted: true };
-  }
-  if (target && typeof target === 'object' && target.kind === 'installer') {
-    if (process.platform !== 'win32') { shell.showItemInFolder(target.path); return { restarted: false }; }
-    const args = ['/S', '--force-run'];
-    if (PORTABLE_DIR) {
-      // Tell the installed edition where the records are. The portable folder itself is left untouched.
-      try {
-        fs.mkdirSync(INSTALLED_USERDATA, { recursive: true });
-        fs.writeFileSync(MIGRATE_FILE, JSON.stringify({ dataDir: DATA_DIR, exe: process.env.PORTABLE_EXECUTABLE_FILE, date: new Date().toISOString() }));
-      } catch (e) { updateLog('could not write migrate note: ' + e.message); return { restarted: false, error: e.message }; }
-    } else args.unshift('--updated');
-    updateLog(`run installer ${target.path} ${args.join(' ')}`);
-    try {
-      spawn(target.path, args, { detached: true, stdio: 'ignore', cwd: path.dirname(target.path) }).unref();
-    } catch (e) {
-      updateLog('installer spawn failed: ' + e.message);
-      shell.showItemInFolder(target.path);
-      return { restarted: false, error: e.message };
-    }
-    setTimeout(() => app.exit(0), 400);
-    return { restarted: true };
-  }
-  // Legacy: a downloaded portable .exe.
-  const newExePath = typeof target === 'string' ? target : target && target.path;
-  const oldExe = process.env.PORTABLE_EXECUTABLE_FILE;
-  if (process.platform !== 'win32' || !oldExe) {
-    shell.showItemInFolder(newExePath);
-    return { restarted: false };
-  }
-  updateLog(`apply: ${oldExe} -> ${newExePath}`);
-  try {
-    spawn(newExePath, [`--cleanup-old=${oldExe}`], { detached: true, stdio: 'ignore', cwd: path.dirname(newExePath) }).unref();
-  } catch (e) {
-    updateLog('spawn failed: ' + e.message);
-    shell.showItemInFolder(newExePath);
-    return { restarted: false, error: e.message };
-  }
-  setTimeout(() => app.exit(0), 400);
-  return { restarted: true };
-});
-ipcMain.on('update:openUrl', (_e, url) => { if (/^https:\/\//.test(url)) shell.openExternal(url); });
-
-// Older unpacked bundles (not the running one) are obsolete; installer leftovers too.
+// ---------- 2.0.x artıkları ----------
+// 2.0.x "bundle" güncellemeleri <veri>/app/<sürüm> altına açılırdı (yalnız program kodu, kullanıcı verisi değil). 2.1.0'dan
+// itibaren güncelleme ortak çekirdekle app.asar'ı değiştirir; eski kod klasörleri ve kurulum artıkları temizlenir.
 setTimeout(() => {
-  try {
-    for (const d of fs.readdirSync(BUNDLE_ROOT)) {
-      if (d === 'current.json') continue;
-      const full = path.join(BUNDLE_ROOT, d);
-      if (full !== global.__CVM_BUNDLE && updater.cmp(d, APP_VERSION) <= 0) fs.rmSync(full, { recursive: true, force: true });
-    }
-  } catch {}
-  try { if (!PORTABLE_DIR) fs.rmSync(path.join(os.tmpdir(), 'cvmaker-update'), { recursive: true, force: true }); } catch {}
+  try { fs.rmSync(path.join(DATA_DIR, 'app'), { recursive: true, force: true }); } catch {}
+  try { fs.rmSync(path.join(os.tmpdir(), 'cvmaker-update'), { recursive: true, force: true }); } catch {}
 }, 15000);

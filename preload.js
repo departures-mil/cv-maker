@@ -1,16 +1,16 @@
 'use strict';
+// CV Maker — preload. window.fcHost (ortak çekirdek: pencere düğmeleri, güncelleme, CORS'suz indirme) + window.api (CV Maker verisi).
+// 2.0.x'teki update:* / contact:send / window:* kanalları kaldırıldı: güncelleme, "Admin ile iletişim" ve pencere düğmeleri çekirdekte.
 const { contextBridge, ipcRenderer } = require('electron');
+require('./cekirdek/electron/fc-preload.js');
 
 contextBridge.exposeInMainWorld('api', {
+  shell: 'fc',
   info: () => ipcRenderer.invoke('app:info'),
-  minimize: () => ipcRenderer.send('window:minimize'),
-  close: () => ipcRenderer.send('window:close'),
-  toggleFullscreen: () => ipcRenderer.send('window:toggleFullscreen'),
-  isFullscreen: () => ipcRenderer.invoke('window:isFullscreen'),
-  onFullscreen: (cb) => ipcRenderer.on('window:fullscreen', (_e, v) => cb(v)),
   openDataDir: () => ipcRenderer.send('app:openDataDir'),
   listBackups: () => ipcRenderer.invoke('backup:list'),
   createBackup: () => ipcRenderer.invoke('backup:create'),
+  backupBeforeUpdate: (to) => ipcRenderer.invoke('backup:beforeUpdate', to),
   restoreBackup: (name) => ipcRenderer.invoke('backup:restore', name),
   openBackupDir: () => ipcRenderer.send('backup:openFolder'),
   importLegacy: (o) => ipcRenderer.invoke('data:importLegacy', o),
@@ -35,13 +35,4 @@ contextBridge.exposeInMainWorld('api', {
   exportDocx: (o) => ipcRenderer.invoke('docx:export', o),
   pickJpegTarget: (o) => ipcRenderer.invoke('jpeg:pickTarget', o),
   saveJpegs: (o) => ipcRenderer.invoke('jpeg:save', o),
-
-  checkUpdate: (override) => ipcRenderer.invoke('update:check', override),
-  downloadUpdate: (m) => ipcRenderer.invoke('update:download', m),
-  applyUpdate: (p) => ipcRenderer.invoke('update:apply', p),
-  openUrl: (u) => ipcRenderer.send('update:openUrl', u),
-  notify: (o) => ipcRenderer.send('app:notify', o),
-  sendContact: (m) => ipcRenderer.invoke('contact:send', m),
-  onNotifyClick: (cb) => ipcRenderer.on('app:notifyClick', () => cb()),
-  onUpdateProgress: (cb) => ipcRenderer.on('update:progress', (_e, p) => cb(p)),
 });
