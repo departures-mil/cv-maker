@@ -20,6 +20,8 @@ test('çekirdek kopyası: VERSION, dosyalar, sürüm', () => {
   const v = read('cekirdek/VERSION');
   assert.match(v, /^ortak-cekirdek [0-9a-f]{40}\n/);
   assert.strictEqual(read('src/cekirdek/VERSION'), v, 'ana süreç ve arayüz çekirdeği aynı commit');
+  assert.match(v, /ebec004/, 'fc-electron-main.js kurulum kanalı düzeltmesi (ebec004)');
+  assert.match(read('cekirdek/electron/fc-electron-main.js'), /if \(isSetup\(meta\)\) return runSetup/, 'win-setup exe app.asar olarak yazılmaz');
   for (const f of ['cekirdek/electron/fc-electron-main.js', 'cekirdek/electron/fc-preload.js', 'cekirdek/electron/fcd1.js', 'src/cekirdek/fc-core.js', 'src/cekirdek/css/tokens.css', 'src/cekirdek/css/core.css',
     'src/cekirdek/fonts/noto-sans-arabic-arabic-400-normal.woff2', 'src/cekirdek/fonts/inter-latin-400-normal.woff2']) assert.ok(fs.existsSync(path.join(ROOT, f)), f);
   require('../src/cekirdek/fc-core.js');
