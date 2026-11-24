@@ -1,5 +1,6 @@
 'use strict';
 const { app, BrowserWindow, ipcMain, dialog, shell, Menu, Notification } = require('electron');
+try { require('./fc-agent-main.js').install(); } catch (e) { console.error('fc-agent', e); }
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
