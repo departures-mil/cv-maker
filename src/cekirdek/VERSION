@@ -1,3 +1,2 @@
 ortak-cekirdek f1d1d850614ee93560181e5a6b15100643b19e14
 https://github.com/departures-mil/ortak-cekirdek/tree/f1d1d850614ee93560181e5a6b15100643b19e14
-electron/fc-electron-main.js: ortak-cekirdek ebec004 (win-setup exe app.asar yerine yazılmaz, doğrulanıp çalıştırılır)
