@@ -90,7 +90,7 @@
       if (Array.isArray(seen) && FC.storage.get('ann.seen', null) == null) FC.storage.set('ann.seen', seen);
     } catch (e) { }
     if (hadData && FC.storage.get('whatsnew.seen', null) == null) {
-      FC.storage.set('whatsnew.seen', '2.0.5');
+      FC.storage.set('whatsnew.seen', '2.0.7');   // son 2.0.x
       FC.storage.set('onboarding.done', true);
       var oldTheme = o.stored.settings.theme;
       if ((oldTheme === 'light' || oldTheme === 'dark') && FC.storage.get('theme', null) == null) FC.storage.set('theme', oldTheme);

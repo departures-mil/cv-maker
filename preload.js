@@ -36,3 +36,4 @@ contextBridge.exposeInMainWorld('api', {
   pickJpegTarget: (o) => ipcRenderer.invoke('jpeg:pickTarget', o),
   saveJpegs: (o) => ipcRenderer.invoke('jpeg:save', o),
 });
+
