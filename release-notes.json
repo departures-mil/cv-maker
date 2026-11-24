@@ -1,4 +1,9 @@
 {
+  "2.0.6": {
+    "tr": "Yeni: ✦ Asistan Agent — bütün programlarınızdaki çalışmanızı izler ve daha verimli çalışmanız için öneriler verir (bildirim + program içi panel). Ayarlar'dan açılıp kapatılabilir.",
+    "en": "New: ✦ Assistant Agent — follows your work across all your programs and suggests how to work more effectively (notifications + in-app panel). Can be turned on/off in Settings.",
+    "ar": "جديد: ✦ الوكيل المساعد — يتابع عملك في جميع برامجك ويقترح طرقاً للعمل بكفاءة أكبر (إشعارات + لوحة داخل البرنامج). يمكن تشغيله أو إيقافه من الإعدادات."
+  },
   "2.0.5": {
     "tr": "«Admin ile iletişime geç» düzeltildi: mesajlar artık yöneticinin mesaj kutusuna ve e-postasına güvenilir biçimde ulaşıyor.",
     "en": "«Contact the admin» fixed: messages now reliably reach the administrator's inbox and e-mail.",
