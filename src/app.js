@@ -13,19 +13,16 @@ const S = {
   tab: 'content',
   open: new Set(),
   history: { stack: [], index: -1 },
-  update: { state: 'idle', manifest: null, progress: 0, error: '' },
 };
 
+// 2.0.x'teki theme / autoUpdate / updateNotify / updateUrl artık kullanılmıyor (görünüm ve güncelleme ortak çekirdekte);
+// settings.json'da kalan eski değerlere dokunulmaz.
 const DEFAULT_SETTINGS = {
   uiLang: null,
-  theme: 'light',
-  autoUpdate: true,
-  updateNotify: true,
   openAfterExport: true,
   zoom: 'fit',
   lastCvId: null,
   customTemplates: [],
-  updateUrl: '',
 };
 
 /* ---------- helpers ---------- */
@@ -67,10 +64,9 @@ const clone = (o) => JSON.parse(JSON.stringify(o));
 const allTemplates = () => [...BUILTIN_TEMPLATES, ...S.settings.customTemplates];
 const templateName = (tpl) => (tpl.builtin ? t('tpl.' + tpl.id) : tpl.name);
 
+// Bildirim ve pencereler ortak çekirdeğin bileşenleri (FC.ui) — görünüm şemaya uyar.
 function toast(msg, kind = 'info', ms = 3200) {
-  const el = h('div', { class: `toast ${kind}` }, msg);
-  $('#toast-root').append(el);
-  setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 300); }, ms);
+  return FC.ui.toast(msg, kind === 'err' ? 'error' : kind === 'ok' ? '' : 'info', ms);
 }
 
 /* ---------- persistence ---------- */
@@ -160,6 +156,9 @@ async function boot() {
   S.info = await api.info();
   const stored = await api.load();
   S.settings = Object.assign({}, DEFAULT_SETTINGS, stored.settings || {});
+  // Dil: ortak çekirdekte seçilmişse o (üst çubuktaki dil düğmesi), yoksa settings.json, yoksa sistem dili.
+  const fcLang = FC.storage.get('lang', null);
+  if (['tr', 'en', 'ar'].includes(fcLang)) S.settings.uiLang = fcLang;
   if (!S.settings.uiLang) {
     const nav = (navigator.language || 'tr').slice(0, 2);
     S.settings.uiLang = ['tr', 'en', 'ar'].includes(nav) ? nav : 'tr';
@@ -175,30 +174,24 @@ async function boot() {
 
   document.head.append(h('style', null, CV_CSS));
   document.title = S.info.title;
+  Kabuk.start({
+    info: S.info, version: S.info.version, stored, uiLang: S.settings.uiLang,
+    lang: (l) => { if (l !== S.settings.uiLang) { setSetting('uiLang', l); applyLanguage(); } },
+    flush: () => { persistCvs.flush(); persistSettings.flush(); api.saveCvsSync({ version: 1, cvs: S.cvs }); api.saveSettingsSync(S.settings); },
+    syncButtons: () => [
+      { label: t('cvExportFile'), icon: 'file', action: exportCvFile },
+      { label: t('backupNow'), icon: 'save', action: backupNowAction },
+      { label: t('openBackupFolder'), icon: 'folder', action: () => api.openBackupDir() },
+    ],
+  });
   bindTopbar();
-  applyTheme();
   applyLanguage();
   resetHistory();
   window.addEventListener('resize', debounce(fitPreview, 100));
-  api.onFullscreen(() => {});
-  api.onUpdateProgress((p) => {
-    S.update.progress = p.total ? p.received / p.total : 0;
-    const now = Date.now(), sp = S.update._sp || (S.update._sp = { t: now, b: p.received || 0, v: 0 });
-    if (now - sp.t >= 700) { const v = ((p.received || 0) - sp.b) / ((now - sp.t) / 1000); sp.v = sp.v ? sp.v * 0.6 + v * 0.4 : v; sp.t = now; sp.b = p.received || 0; }
-    S.update.speed = sp.v;
-    S.update.received = p.received;
-    S.update.total = p.total;
-    renderUpdateProgress();
-  });
-  // Updates are looked for once, when the program opens.
-  // A portable copy that just updated itself continues straight to the installed edition.
-  if (S.info.portable && S.info.afterUpdate) setTimeout(() => checkUpdates(true, true), 800);
-  else if (S.settings.autoUpdate) setTimeout(() => checkUpdates(true), 1500);
   if (S.info.migration) {
     const mg = S.info.migration;
     setTimeout(() => toast(t('migrated', { n: mg.total, added: mg.added + mg.updated }), 'ok', 9000), 1200);
   }
-  api.onNotifyClick(() => { if (S.update.state === 'available') openSettings(); });
   gcAttachments();
 }
 
@@ -210,33 +203,23 @@ function gcAttachments() {
   api.gcAttachments(ids);
 }
 
-function applyTheme() {
-  document.documentElement.dataset.theme = S.settings.theme;
-}
-
 function applyLanguage() {
   const lang = S.settings.uiLang;
   document.documentElement.lang = lang;
   document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
-  $('#lang-select').value = lang;
   $('#app-title').textContent = S.info.title;
   for (const el of document.querySelectorAll('[data-i18n]')) el.textContent = t(el.dataset.i18n);
   for (const el of document.querySelectorAll('[data-i18n-title]')) el.title = t(el.dataset.i18nTitle);
   renderCvSelect();
   renderEditor();
   renderPreview();
-  renderUpdateBanner();
 }
 
 /* ---------- top bar ---------- */
 
 function bindTopbar() {
-  $('#btn-min').onclick = () => api.minimize();
-  $('#btn-close').onclick = () => api.close();
-  $('#btn-fullscreen').onclick = () => api.toggleFullscreen();
   $('#btn-undo').onclick = () => undoRedo(-1);
   $('#btn-redo').onclick = () => undoRedo(1);
-  $('#lang-select').onchange = (e) => { setSetting('uiLang', e.target.value); applyLanguage(); };
   $('#cv-select').onchange = (e) => switchCv(e.target.value);
   $('#btn-cv-menu').onclick = (e) => openMenu(e.currentTarget, [
     { label: t('cvNew'), icon: '＋', action: newCvAction },
@@ -363,17 +346,11 @@ function openMenu(anchor, items) {
 }
 
 function modal({ title, body, buttons, wide, onClose }) {
-  const root = $('#modal-root');
-  const close = () => { wrap.remove(); onClose && onClose(); };
-  const footer = h('div', { class: 'modal-foot' }, (buttons || []).map((b) =>
-    h('button', { class: `btn ${b.kind || ''}`, onclick: () => b.action ? b.action(close) : close() }, b.label)));
-  const wrap = h('div', { class: 'modal-wrap', onmousedown: (e) => { if (e.target === wrap) close(); } },
-    h('div', { class: `modal${wide ? ' wide' : ''}` },
-      h('div', { class: 'modal-head' }, h('h3', null, title), h('button', { class: 'icon-btn', onclick: close, title: t('close') }, '✕')),
-      h('div', { class: 'modal-body' }, body),
-      buttons && buttons.length ? footer : null));
-  root.append(wrap);
-  return { close, wrap };
+  const m = FC.ui.modal({
+    title, body, cls: wide ? 'wide' : '', onClose,
+    buttons: (buttons || []).map((b) => ({ label: b.label, cls: b.kind || '', onClick: (close) => { if (b.action) { b.action(close); return false; } } })),
+  });
+  return { close: m.close, wrap: m.el };
 }
 
 function confirmDialog(title, message, danger) {
@@ -397,7 +374,7 @@ function promptDialog(title, label, value) {
     const input = h('input', { class: 'input', value: value || '' });
     const finish = (v, close) => { done = true; close(); resolve(v); };
     const m = modal({
-      title, body: h('label', { class: 'field' }, h('span', null, label), input),
+      title, body: h('label', { class: 'ed-field' }, h('span', null, label), input),
       onClose: () => { if (!done) resolve(null); },
       buttons: [
         { label: t('cancel'), action: (c) => finish(null, c) },
@@ -471,19 +448,19 @@ function renderEditor() {
   updateUndoButtons();
 }
 
-const iconBtn = (label, title, onclick, extra = '') => h('button', { class: `icon-btn ${extra}`, title, onclick: (e) => { e.stopPropagation(); onclick(e); } }, label);
+const iconBtn = (label, title, onclick, extra = '') => h('button', { class: `ed-ibtn ${extra}`, title, onclick: (e) => { e.stopPropagation(); onclick(e); } }, label);
 const eyeBtn = (visible, onclick) => iconBtn(visible ? '👁' : '◌', visible ? t('hide') : t('show'), onclick, visible ? '' : 'off');
 
 function card({ id, title, icon, badge, open, actions, body, hidden, handle = true, cls = '' }) {
   const isOpen = S.open.has(id) || open;
-  const head = h('div', { class: 'card-head', onclick: () => { S.open.has(id) ? S.open.delete(id) : S.open.add(id); el.classList.toggle('open'); } },
+  const head = h('div', { class: 'ed-card-head', onclick: () => { S.open.has(id) ? S.open.delete(id) : S.open.add(id); el.classList.toggle('open'); } },
     handle ? h('span', { class: 'drag-handle', title: t('dragToMove'), onclick: (e) => e.stopPropagation() }, '⠿') : null,
-    icon ? h('span', { class: 'card-icon' }, icon) : null,
-    h('span', { class: 'card-title' }, title),
-    badge !== undefined ? h('span', { class: 'badge' }, badge) : null,
-    h('span', { class: 'card-actions' }, actions || []),
+    icon ? h('span', { class: 'ed-card-icon' }, icon) : null,
+    h('span', { class: 'ed-card-title' }, title),
+    badge !== undefined ? h('span', { class: 'ed-badge' }, badge) : null,
+    h('span', { class: 'ed-card-actions' }, actions || []),
     h('span', { class: 'chev' }, '▾'));
-  const el = h('div', { class: `card ${cls}${isOpen ? ' open' : ''}${hidden ? ' is-hidden' : ''}`, 'data-id': id }, head, h('div', { class: 'card-body' }, body));
+  const el = h('div', { class: `ed-card ${cls}${isOpen ? ' open' : ''}${hidden ? ' is-hidden' : ''}`, 'data-id': id }, head, h('div', { class: 'ed-card-body' }, body));
   return el;
 }
 
@@ -493,7 +470,7 @@ function contentPanel() {
   wrap.append(photoCard(), personalCard());
 
   const list = h('div', { class: 'section-list' }, cv.sections.map((s, i) => sectionCard(s, i)));
-  sortable(list, '.card.section', (ids) => { cv.sections = reorderBy(cv.sections, ids); changed(true); });
+  sortable(list, '.ed-card.section', (ids) => { cv.sections = reorderBy(cv.sections, ids); changed(true); });
   wrap.append(h('h4', { class: 'group-title' }, t('sections')), list);
   wrap.append(h('button', { class: 'btn add-section', onclick: (e) => addSectionMenu(e.currentTarget) }, '＋ ' + t('addSection')));
   return wrap;
@@ -595,7 +572,7 @@ function openCropper(src) {
     title: t('photoCrop'),
     body: h('div', { class: 'cropper' }, canvas,
       h('div', { class: 'crop-tools' },
-        h('label', { class: 'field inline' }, h('span', null, t('zoom')), zoom),
+        h('label', { class: 'ed-field inline' }, h('span', null, t('zoom')), zoom),
         h('button', { class: 'btn', onclick: rotate }, '⟳ ' + t('rotate'))),
       h('p', { class: 'muted small' }, t('cropHint'))),
     buttons: [
@@ -641,7 +618,7 @@ function editCustomLabels(c) {
   const inputs = {};
   const body = h('div', null,
     h('p', { class: 'muted small' }, t('labelTranslationsHint')),
-    ['tr', 'en', 'ar'].map((l) => h('label', { class: 'field' }, h('span', null, t('lang.' + l)),
+    ['tr', 'en', 'ar'].map((l) => h('label', { class: 'ed-field' }, h('span', null, t('lang.' + l)),
       inputs[l] = h('input', { class: 'input', dir: l === 'ar' ? 'rtl' : 'ltr', value: (c.labels && c.labels[l]) || '', placeholder: c.label }))));
   modal({
     title: t('labelTranslations'), body,
@@ -717,7 +694,7 @@ function sectionCard(s, i) {
   const twoCol = cv.design.layout !== 'classic';
 
   const items = h('div', { class: 'item-list' }, s.items.map((it, j) => itemCard(s, it, j)));
-  sortable(items, '.card.item', (ids) => { s.items = reorderBy(s.items, ids); changed(true); });
+  sortable(items, '.ed-card.item', (ids) => { s.items = reorderBy(s.items, ids); changed(true); });
 
   const addBtn = s.type === 'documents'
     ? h('button', { class: 'btn small', onclick: () => addDocuments(s) }, '＋ ' + t('addDocument'))
@@ -725,9 +702,9 @@ function sectionCard(s, i) {
 
   const body = h('div', null,
     h('div', { class: 'sec-settings' },
-      h('label', { class: 'field' }, h('span', null, t('sectionTitle')),
-        h('input', { class: 'input', value: s.title, placeholder: defaultTitle, dir: 'auto', oninput: (e) => { s.title = e.target.value; changed(); const ct = e.target.closest('.card').querySelector('.card-title'); ct.textContent = e.target.value || defaultTitle; } })),
-      twoCol ? h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: s.side, onchange: (e) => { s.side = e.target.checked; changed(); } }), t('showInSidebar')) : null),
+      h('label', { class: 'ed-field' }, h('span', null, t('sectionTitle')),
+        h('input', { class: 'input', value: s.title, placeholder: defaultTitle, dir: 'auto', oninput: (e) => { s.title = e.target.value; changed(); const ct = e.target.closest('.ed-card').querySelector('.ed-card-title'); ct.textContent = e.target.value || defaultTitle; } })),
+      twoCol ? h('label', { class: 'ed-check' }, h('input', { type: 'checkbox', checked: s.side, onchange: (e) => { s.side = e.target.checked; changed(); } }), t('showInSidebar')) : null),
     s.type === 'documents' ? h('p', { class: 'muted small' }, t('documentsHint')) : null,
     items,
     addBtn);
@@ -782,7 +759,7 @@ function itemCard(s, it, j) {
 }
 
 function refreshItemTitle(input, s, it) {
-  const ct = input.closest('.card.item')?.querySelector('.card-title');
+  const ct = input.closest('.ed-card.item')?.querySelector('.ed-card-title');
   if (ct) ct.textContent = (SECTION_TYPES[s.type].summary(it) || '').toString().split('\n')[0].slice(0, 80) || t('newItem');
 }
 
@@ -791,36 +768,36 @@ function fieldInput(s, it, f) {
   const set = (v, input) => { it[f.k] = v; changed(); if (input) refreshItemTitle(input, s, it); };
   switch (f.type) {
     case 'textarea':
-      return h('label', { class: 'field full' }, h('span', null, label),
+      return h('label', { class: 'ed-field full' }, h('span', null, label),
         h('textarea', { class: 'input', rows: f.rows || 3, dir: 'auto', oninput: (e) => set(e.target.value, e.target) }, it[f.k] || ''),
         s.type !== 'summary' ? h('small', { class: 'muted' }, t('bulletHint')) : null);
     case 'check':
-      return h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: f.k === 'append' ? it[f.k] !== false : !!it[f.k], onchange: (e) => {
+      return h('label', { class: 'ed-check' }, h('input', { type: 'checkbox', checked: f.k === 'append' ? it[f.k] !== false : !!it[f.k], onchange: (e) => {
         it[f.k] = e.target.checked; changed();
         if (f.k === 'current') { const end = e.target.closest('.field-grid').querySelector('[data-k="end"]'); if (end) end.querySelectorAll('select').forEach((x) => { x.disabled = e.target.checked; }); }
       } }), t('field.' + f.k));
     case 'month': {
       const dp = datePicker(it[f.k], (v) => set(v), { disabled: f.k === 'end' && it.current });
       dp.dataset.k = f.k;
-      return h('label', { class: 'field' }, h('span', null, label), dp);
+      return h('label', { class: 'ed-field' }, h('span', null, label), dp);
     }
     case 'range': {
       const out = h('b', null, it[f.k] ? `${it[f.k]}/5` : t('levelHidden'));
-      return h('label', { class: 'field' }, h('span', null, label, ' ', out),
+      return h('label', { class: 'ed-field' }, h('span', null, label, ' ', out),
         h('input', { type: 'range', class: 'range', min: f.min, max: f.max, step: 1, value: it[f.k] ?? 3, oninput: (e) => { it[f.k] = Number(e.target.value); out.textContent = it[f.k] ? `${it[f.k]}/5` : t('levelHidden'); changed(); } }));
     }
     case 'select':
-      return h('label', { class: 'field' }, h('span', null, label),
+      return h('label', { class: 'ed-field' }, h('span', null, label),
         h('select', { class: 'input', onchange: (e) => set(e.target.value) },
           h('option', { value: '' }, '—'),
           f.options.map((o) => h('option', { value: o, selected: it[f.k] === o }, t(f.optPrefix + o)))));
     case 'file':
-      return h('div', { class: 'field full' }, h('span', null, t('field.file')), fileWidget(s, it));
+      return h('div', { class: 'ed-field full' }, h('span', null, t('field.file')), fileWidget(s, it));
     case 'phones':
       if (!Array.isArray(it.phones) || !it.phones.length) it.phones = [newPhone()];
-      return h('div', { class: 'field full' }, h('span', null, t('field.phones')), phonesEditor(it.phones, () => {}));
+      return h('div', { class: 'ed-field full' }, h('span', null, t('field.phones')), phonesEditor(it.phones, () => {}));
     default:
-      return h('label', { class: 'field' }, h('span', null, label),
+      return h('label', { class: 'ed-field' }, h('span', null, label),
         h('input', { class: 'input', type: 'text', value: it[f.k] || '', dir: 'auto', oninput: (e) => set(e.target.value, e.target) }));
   }
 }
@@ -887,8 +864,8 @@ function designPanel() {
   const d = cv.design;
   const wrap = h('div', { class: 'panel' });
 
-  wrap.append(h('div', { class: 'card open static' }, h('div', { class: 'card-body' },
-    h('label', { class: 'field' }, h('span', null, t('cvLanguage')),
+  wrap.append(h('div', { class: 'ed-card open static' }, h('div', { class: 'ed-card-body' },
+    h('label', { class: 'ed-field' }, h('span', null, t('cvLanguage')),
       h('select', { class: 'input', onchange: (e) => { cv.lang = e.target.value; changed(true); } },
         ['auto', 'tr', 'en', 'ar'].map((l) => h('option', { value: l, selected: cv.lang === l }, t('lang.' + l))))),
     h('p', { class: 'muted small' }, t('cvLanguageHint')))));
@@ -908,12 +885,12 @@ function designPanel() {
         }
       }, 'danger'));
     gallery.append(h('div', { class: `tpl${d.templateId === tpl.id ? ' active' : ''}`, onclick: () => { cv.design = pickDesign(tpl); changed(true); } },
-      thumb, h('div', { class: 'tpl-name' }, templateName(tpl), tpl.builtin ? null : h('span', { class: 'badge' }, t('custom'))), actions));
+      thumb, h('div', { class: 'tpl-name' }, templateName(tpl), tpl.builtin ? null : h('span', { class: 'ed-badge' }, t('custom'))), actions));
   }
   const tplInput = h('input', { type: 'file', accept: '.cvtemplate,.json', hidden: true, onchange: (e) => importTemplate(e.target.files[0]) });
-  wrap.append(h('div', { class: 'card open static' },
-    h('div', { class: 'card-head static' }, h('span', { class: 'card-icon' }, '🎨'), h('span', { class: 'card-title' }, t('templates'))),
-    h('div', { class: 'card-body' }, gallery,
+  wrap.append(h('div', { class: 'ed-card open static' },
+    h('div', { class: 'ed-card-head static' }, h('span', { class: 'ed-card-icon' }, '🎨'), h('span', { class: 'ed-card-title' }, t('templates'))),
+    h('div', { class: 'ed-card-body' }, gallery,
       h('div', { class: 'row-btns' },
         h('button', { class: 'btn primary', onclick: saveAsTemplate }, '＋ ' + t('saveAsTemplate')),
         h('button', { class: 'btn', onclick: () => tplInput.click() }, '⇩ ' + t('importTemplate')), tplInput),
@@ -921,25 +898,25 @@ function designPanel() {
 
   // customization
   const set = (k, structural) => (e) => { d[k] = e.target.type === 'range' ? Number(e.target.value) : e.target.value; changed(structural); };
-  const sel = (k, opts, structural) => h('label', { class: 'field' }, h('span', null, t('d.' + k)),
+  const sel = (k, opts, structural) => h('label', { class: 'ed-field' }, h('span', null, t('d.' + k)),
     h('select', { class: 'input', onchange: set(k, structural) }, opts.map((o) => h('option', { value: o, selected: d[k] === o }, t(`d.${k}.${o}`)))));
-  const color = (k) => h('label', { class: 'field color' }, h('span', null, t('d.' + k)),
+  const color = (k) => h('label', { class: 'ed-field color' }, h('span', null, t('d.' + k)),
     h('input', { type: 'color', value: d[k], oninput: set(k) }));
   const swatches = h('div', { class: 'swatches' }, ['#3b82f6', '#0f4c81', '#1f2937', '#0f766e', '#059669', '#9d174d', '#b91c1c', '#c2410c', '#7c3aed', '#a16207'].map((c) =>
     h('button', { class: 'swatch', style: `background:${c}`, title: c, onclick: () => { d.accent = c; changed(true); } })));
   const fsOut = h('b', null, `${d.fontSize} pt`);
 
-  wrap.append(h('div', { class: 'card open static' },
-    h('div', { class: 'card-head static' }, h('span', { class: 'card-icon' }, '🖌'), h('span', { class: 'card-title' }, t('customize'))),
-    h('div', { class: 'card-body field-grid' },
+  wrap.append(h('div', { class: 'ed-card open static' },
+    h('div', { class: 'ed-card-head static' }, h('span', { class: 'ed-card-icon' }, '🖌'), h('span', { class: 'ed-card-title' }, t('customize'))),
+    h('div', { class: 'ed-card-body field-grid' },
       sel('layout', ['classic', 'sidebar', 'banner', 'split'], true),
       d.layout !== 'classic' ? sel('sidebarSide', ['start', 'end']) : h('span'),
       color('accent'), swatches,
       d.layout !== 'classic' ? color('sidebarBg') : null,
       d.layout !== 'classic' ? color('sidebarText') : null,
-      h('label', { class: 'field' }, h('span', null, t('d.font')),
+      h('label', { class: 'ed-field' }, h('span', null, t('d.font')),
         h('select', { class: 'input', onchange: set('font') }, Object.entries(FONTS).map(([k, f]) => h('option', { value: k, selected: d.font === k, style: `font-family:${f.css}` }, f.label)))),
-      h('label', { class: 'field' }, h('span', null, t('d.fontSize'), ' ', fsOut),
+      h('label', { class: 'ed-field' }, h('span', null, t('d.fontSize'), ' ', fsOut),
         h('input', { type: 'range', class: 'range', min: 8, max: 13, step: 0.5, value: d.fontSize, oninput: (e) => { d.fontSize = Number(e.target.value); fsOut.textContent = `${d.fontSize} pt`; changed(); } })),
       sel('headingStyle', ['line', 'bar', 'caps', 'boxed', 'plain']),
       sel('photoShape', ['rect', 'rounded', 'circle', 'none']),
@@ -1028,7 +1005,7 @@ function exportName() {
 }
 
 async function withBusy(label, fn) {
-  const busy = h('div', { class: 'busy' }, h('div', { class: 'busy-box' }, h('div', { class: 'spinner' }), label));
+  const busy = h('div', { class: 'ed-busy' }, h('div', { class: 'ed-busy-box' }, h('div', { class: 'spinner' }), label));
   document.body.append(busy);
   try { return await fn(); }
   catch (e) { console.error(e); toast(t('exportFailed'), 'err', 6000); }
@@ -1075,64 +1052,44 @@ async function exportJpeg() {
   });
 }
 
-/* ---------- settings & updates ---------- */
-
-function openSettings() {
-  const st = S.settings;
+/* ---------- settings ---------- */
+// Ayarlar ortak çekirdeğin düzeninde: Görünüm (şema, mod, yazı boyutu, dil) · CV Maker kartları · Asistan Agent ·
+// Kullanım Limitleri · Otomatik hata raporu · Hakkında (güncelleme denetimi, neler yeni, rehber) · Admin ile iletişim (EN SON).
+function settingsCards() {
+  const ui = FC.ui;
   const row = (label, control, hint) => h('div', { class: 'set-row' }, h('div', null, h('div', { class: 'set-label' }, label), hint ? h('div', { class: 'muted small' }, hint) : null), control);
-  const toggle = (k, after) => h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: st[k], onchange: (e) => { setSetting(k, e.target.checked); after && after(); } }), h('span'));
 
-  const body = h('div', { class: 'settings' },
-    h('h4', null, t('general')),
-    row(t('uiLanguage'), h('select', { class: 'input', onchange: (e) => { setSetting('uiLang', e.target.value); m.close(); applyLanguage(); openSettings(); } },
-      ['tr', 'en', 'ar'].map((l) => h('option', { value: l, selected: st.uiLang === l }, t('lang.' + l))))),
-    row(t('theme'), h('select', { class: 'input', onchange: (e) => { setSetting('theme', e.target.value); applyTheme(); } },
-      ['light', 'dark'].map((v) => h('option', { value: v, selected: st.theme === v }, t('theme.' + v))))),
-    row(t('openAfterExport'), toggle('openAfterExport')),
+  const exp = ui.card({ key: 'cv-export', title: t('exportSettings'), icon: 'file' });
+  exp.append(h('label', { class: 'check' },
+    h('input', { type: 'checkbox', checked: S.settings.openAfterExport, onchange: (e) => setSetting('openAfterExport', e.target.checked) }), t('openAfterExport')));
 
-    h('h4', null, t('updates')),
-    row(t('currentVersion'), h('b', null, S.info.title)),
-    row(t('autoUpdate'), toggle('autoUpdate'), t('autoUpdateHint')),
-    row(t('updateNotify'), toggle('updateNotify'), t('updateNotifyHint')),
-    h('div', { id: 'update-panel', class: 'update-panel' }),
-    h('details', { class: 'advanced' }, h('summary', null, t('advanced')),
-      row(t('updateServer'), h('input', { class: 'input', dir: 'ltr', value: st.updateUrl, placeholder: 'https://…', onchange: (e) => setSetting('updateUrl', e.target.value.trim()) }), t('updateServerHint'))),
-
-    h('h4', null, t('data')),
-    row(t('dataFolder'), h('button', { class: 'btn', onclick: () => api.openDataDir() }, t('openFolder')), S.info.dataDir),
-    row(t('backups'), h('div', { class: 'row-btns' },
-      h('button', { class: 'btn', onclick: async () => { persistCvs.flush(); api.saveCvsSync({ version: 1, cvs: S.cvs }); await api.createBackup(); toast(t('backupDone'), 'ok'); renderBackupList(); } }, t('backupNow')),
-      h('button', { class: 'btn', onclick: () => api.openBackupDir() }, t('openFolder'))), t('backupsHint')),
+  const data = ui.card({ key: 'cv-data', title: t('dataCard'), icon: 'folder' });
+  data.append(
+    row(t('dataFolder'), h('button', { class: 'btn small', onclick: () => api.openDataDir() }, t('openFolder')), h('span', { class: 'ltr' }, S.info.dataDir)),
+    h('p', { class: 'muted small' }, t('dataFolderHint')),
+    row(t('backups'), h('div', { class: 'row-btns', style: 'margin:0' },
+      h('button', { class: 'btn small primary', onclick: async () => { await backupNowAction(); renderBackupList(); } }, t('backupNow')),
+      h('button', { class: 'btn small', onclick: () => api.openBackupDir() }, t('openFolder'))), t('backupsHint')),
     h('div', { id: 'backup-list', class: 'backup-list' }),
-    row(t('importOld'), h('button', { class: 'btn', onclick: importOldData }, t('importOldBtn')), t('importOldHint')),
+    row(t('importOld'), h('button', { class: 'btn small', onclick: importOldData }, t('importOldBtn')), t('importOldHint')));
 
-    h('h4', null, t('shortcuts')),
-    h('div', { class: 'shortcuts' }, [['Ctrl+Z', t('undo')], ['Ctrl+Y', t('redo')], ['Ctrl+P', t('exportPdf')], ['F11', t('toggleFullscreen')]].map(([k, v]) =>
-      h('div', null, h('kbd', null, k), ' ', v))),
-    window.Kullanim ? Kullanim.kart() : '',
-    h('h4', null, t('contactAdmin')),
-    h('div', { class: 'muted small' }, t('contactInfo')),
-    contactForm(),
-    h('p', { class: 'muted small about' }, `${S.info.title} · ${t(S.info.portable ? 'portableNote' : 'installedNote')}`));
-  const m = modal({ title: t('settings'), body, wide: true, buttons: [{ label: t('close'), kind: 'primary' }] });
-  renderUpdatePanel();
-  renderBackupList();
+  const keys = ui.card({ key: 'cv-keys', title: t('shortcutsCard'), icon: 'keyboard' });
+  keys.append(h('div', { class: 'shortcuts' }, [['Ctrl+Z', t('undo')], ['Ctrl+Y', t('redo')], ['Ctrl+P', t('exportPdf')], ['F11', t('toggleFullscreen')]].map(([k, v]) =>
+    h('div', null, h('kbd', { dir: 'ltr' }, k), ' ', v))));
+  return [exp, data, keys];
 }
 
-function contactForm() {
-  const name = h('input', { class: 'input', dir: 'auto', maxlength: 80, placeholder: t('contactName') });
-  const mail = h('input', { class: 'input', dir: 'ltr', maxlength: 120, inputmode: 'email', placeholder: t('contactMail') });
-  const msg = h('textarea', { class: 'input', dir: 'auto', maxlength: 5000, rows: 5, placeholder: t('contactMsg'), style: 'width:100%;resize:vertical' });
-  const btn = h('button', { class: 'btn primary', onclick: async () => {
-    const m = msg.value.trim(), e = mail.value.trim();
-    if (!m) { toast(t('contactEmpty'), 'err'); return; }
-    if (e && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) { toast(t('contactBadMail'), 'err'); return; }
-    btn.disabled = true;
-    const r = await api.sendContact({ name: name.value.trim(), email: e, message: m, lang: S.settings.uiLang }).catch((x) => ({ ok: false, error: x.message }));
-    btn.disabled = false;
-    if (r && r.ok) { msg.value = ''; toast(t('contactSent'), 'ok', 5000); } else toast(t('contactFail'), 'err', 6000);
-  } }, '✉ ' + t('contactSend'));
-  return h('div', { class: 'contact-form', style: 'display:grid;gap:8px;margin-top:8px' }, h('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:8px' }, name, mail), msg, h('div', { class: 'row-btns' }, btn));
+function openSettings() {
+  const m = Kabuk.openSettings(settingsCards());
+  renderBackupList();
+  return m;
+}
+
+async function backupNowAction() {
+  persistCvs.flush();
+  api.saveCvsSync({ version: 1, cvs: S.cvs });
+  await api.createBackup();
+  toast(t('backupDone'), 'ok');
 }
 
 async function renderBackupList() {
@@ -1176,139 +1133,4 @@ async function importOldData() {
   }
 }
 
-function renderUpdatePanel() {
-  const p = $('#update-panel');
-  if (!p) return;
-  const u = S.update;
-  const items = [];
-  if (u.state === 'checking') items.push(h('div', { class: 'muted' }, t('checking')));
-  else if (u.state === 'none') items.push(h('div', { class: 'ok-text' }, '✓ ' + t('upToDate')));
-  else if (u.state === 'error') items.push(h('div', { class: 'err-text' }, u.error === 'not-configured' ? t('updateNotConfigured') : t('updateError', { e: u.error })));
-  if (u.state === 'available' || u.state === 'downloading' || u.state === 'ready') {
-    const mf = u.manifest;
-    const notes = mf.notes && (mf.notes[S.settings.uiLang] || mf.notes.en || mf.notes.tr);
-    items.push(h('div', { class: 'update-avail' },
-      h('div', null, h('b', null, t('updateAvailable', { v: `CV Maker v${mf.displayVersion || mf.version}` }))),
-      notes ? h('div', { class: 'notes' }, notes) : null));
-  }
-  if (u.state === 'downloading') items.push(h('div', { class: 'progress' }, h('i', { id: 'update-bar', style: `width:${u.progress * 100}%` })));
-  if (u.state === 'downloading') items.push(h('div', { id: 'update-pct', class: 'muted small' }, progressText()));
-  const btns = h('div', { class: 'row-btns' });
-  if (u.state === 'available') btns.append(h('button', { class: 'btn primary', onclick: doUpdate }, '⬇ ' + t('updateNow')));
-  if (!['checking', 'downloading'].includes(u.state)) btns.append(h('button', { class: 'btn', onclick: () => checkUpdates(false) }, '⟳ ' + t('checkUpdates')));
-  items.push(btns);
-  p.replaceChildren(...items);
-}
-function renderUpdateProgress() {
-  const bar = document.getElementById('update-bar');
-  if (bar) bar.style.width = S.update.progress * 100 + '%';
-  const bb = document.getElementById('banner-bar');
-  if (bb) bb.style.width = S.update.progress * 100 + '%';
-  const pct = document.getElementById('banner-pct');
-  if (pct) pct.textContent = progressText();
-  const pp = document.getElementById('update-pct');
-  if (pp) pp.textContent = progressText();
-}
-
-let checkingNow = false;
-const notifiedThisRun = new Set();
-
-async function checkUpdates(silent, autoInstall) {
-  if (checkingNow) return;
-  checkingNow = true;
-  // Background checks stay invisible unless something new is found.
-  if (!silent) { S.update.state = 'checking'; renderUpdatePanel(); }
-  const prev = S.update.manifest && S.update.manifest.version;
-  let r;
-  try { r = await api.checkUpdate(S.settings.updateUrl); } catch (e) { r = { ok: false, error: e.message }; }
-  checkingNow = false;
-  if (S.update.state === 'downloading' || S.update.state === 'ready') return;
-  if (!r.ok) {
-    if (silent && S.update.state === 'available') return;
-    S.update = { ...S.update, state: silent ? 'idle' : 'error', error: r.error };
-  } else if (r.available) {
-    const isNew = prev !== r.manifest.version;
-    S.update = { ...S.update, state: 'available', manifest: r.manifest, migrate: !!r.migrate };
-    if (autoInstall && r.migrate) { renderUpdateBanner(); return doUpdate(); }
-    const v = `CV Maker v${r.manifest.displayVersion || r.manifest.version}`;
-    // Notify once per version every time the program runs, until it is installed.
-    if (S.settings.updateNotify !== false && !notifiedThisRun.has(r.manifest.version)) {
-      notifiedThisRun.add(r.manifest.version);
-      api.notify({ title: t('updateNotifyTitle'), body: t('updateNotifyBody', { v }) });
-    }
-    if (silent && !isNew) return;
-  } else {
-    if (silent && S.update.state === 'none') return;
-    S.update = { ...S.update, state: 'none' };
-  }
-  renderUpdatePanel();
-  renderUpdateBanner();
-}
-
-function renderUpdateBanner() {
-  const b = $('#update-banner');
-  const u = S.update;
-  if (!u.manifest || !['available', 'downloading', 'ready', 'error'].includes(u.state) || (u.state === 'error' && !u.fromBanner)) { b.hidden = true; return; }
-  const v = `CV Maker v${u.manifest.displayVersion || u.manifest.version}`;
-  b.hidden = false;
-  const items = [];
-  if (u.state === 'available') {
-    items.push(h('span', null, '🎉 ' + (u.migrate ? t('migrateAvailable', { v }) : t('updateAvailable', { v }))),
-      h('button', { class: 'btn primary small', onclick: doUpdate }, t('updateNow')),
-      h('button', { class: 'icon-btn', onclick: () => { b.hidden = true; } }, '✕'));
-  } else if (u.state === 'downloading') {
-    items.push(h('span', null, t('updateDownloading', { v })),
-      h('div', { class: 'progress small' }, h('i', { id: 'banner-bar', style: `width:${u.progress * 100}%` })),
-      h('b', { id: 'banner-pct', class: 'pct' }, progressText()));
-  } else if (u.state === 'ready') {
-    items.push(h('span', null, t('updateRestarting')));
-  } else {
-    items.push(h('span', null, '⚠ ' + t('updateFailed')),
-      h('button', { class: 'btn small', onclick: doUpdate }, t('retry')),
-      h('button', { class: 'btn small', onclick: () => api.openUrl(u.manifest.url) }, t('downloadInBrowser')),
-      h('button', { class: 'icon-btn', onclick: () => { b.hidden = true; } }, '✕'));
-  }
-  b.replaceChildren(...items);
-}
-
-function progressText() {
-  const u = S.update;
-  const mb = (n) => (n / 1048576).toFixed(n < 10485760 ? 1 : 0);
-  const sp = u.speed > 0 ? ` · ${u.speed >= 1048576 ? (u.speed / 1048576).toFixed(1) + ' MB/s' : Math.round(u.speed / 1024) + ' KB/s'}` : '';
-  return u.total
-    ? `%${Math.round(u.progress * 100)} · ${mb(u.received || 0)} / ${mb(u.total)} MB · ${t('remaining', { n: mb(Math.max(0, u.total - (u.received || 0))) })}${sp}`
-    : `${mb(u.received || 0)} MB${sp}`;
-}
-
-async function doUpdate() {
-  S.update.state = 'downloading';
-  S.update.progress = 0;
-  S.update.received = 0;
-  S.update._sp = null;
-  S.update.speed = 0;
-  S.update.fromBanner = true;
-  renderUpdatePanel();
-  renderUpdateBanner();
-  try {
-    persistCvs.flush();
-    const file = await api.downloadUpdate(S.update.manifest);
-    S.update.state = 'ready';
-    renderUpdatePanel();
-    renderUpdateBanner();
-    api.saveCvsSync({ version: 1, cvs: S.cvs });
-    api.saveSettingsSync(S.settings);
-    const r = await api.applyUpdate(file);
-    if (!r.restarted) {
-      S.update.state = 'available';
-      renderUpdateBanner();
-      toast(t('updateDownloadedManual', { path: file.path || file }), 'info', 10000);
-    }
-  } catch (e) {
-    S.update.state = 'error';
-    S.update.error = e.message || String(e);
-    renderUpdatePanel();
-    renderUpdateBanner();
-  }
-}
-
-boot();
+document.addEventListener('DOMContentLoaded', () => { boot().catch((e) => { console.error(e); (window.__cvmErrors || []).push('boot: ' + (e && e.message)); }); });
