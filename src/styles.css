@@ -203,3 +203,6 @@ kbd { display: inline-block; min-width: 56px; padding: 2px 6px; border: 1px soli
 .backup-list { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 12px; max-height: 260px; overflow: auto; }
 .backup-row { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; padding: 6px 10px; border-radius: 8px; background: var(--cv-panel-2); }
 .backup-list > .btn.small { align-self: flex-start; }
+
+/* 2.1.1: dosya yolu gibi soldan sağa metinler Arapçada (RTL) bozulmasın */
+.ltr { direction: ltr; unicode-bidi: isolate; text-align: left; overflow-wrap: anywhere; }
