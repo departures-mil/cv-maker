@@ -1065,7 +1065,7 @@ function settingsCards() {
 
   const data = ui.card({ key: 'cv-data', title: t('dataCard'), icon: 'folder' });
   data.append(
-    row(t('dataFolder'), h('button', { class: 'btn small', onclick: () => api.openDataDir() }, t('openFolder')), h('span', { class: 'ltr' }, S.info.dataDir)),
+    row(t('dataFolder'), h('button', { class: 'btn small', onclick: () => api.openDataDir() }, t('openFolder')), h('span', { class: 'ltr', dir: 'ltr' }, S.info.dataDir)),
     h('p', { class: 'muted small' }, t('dataFolderHint')),
     row(t('backups'), h('div', { class: 'row-btns', style: 'margin:0' },
       h('button', { class: 'btn small primary', onclick: async () => { await backupNowAction(); renderBackupList(); } }, t('backupNow')),
