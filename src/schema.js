@@ -37,6 +37,11 @@ function normPhones(list, legacy) {
 }
 
 const LANGUAGE_LEVELS = ['native', 'fluent', 'advanced', 'intermediate', 'beginner'];
+const ICAO_LEVELS = ['6', '5', '4'];
+const MEDICAL_CLASSES = ['class1', 'class2', 'class3', 'lapl'];
+const AIRCRAFT_CATEGORIES = ['aeroplane', 'helicopter'];
+const fmtHours = (v, lang) => { const n = Number(String(v || '').replace(',', '.')); return n ? n.toLocaleString(lang === 'ar' ? 'ar-u-nu-latn' : lang === 'en' ? 'en-GB' : 'tr-TR', { maximumFractionDigits: 1 }) : ''; };
+const HOUR_KEYS = ['total', 'pic', 'sic', 'ifr', 'night'];
 
 /*
  * Each type: fields (editor), side (default column in two-column layouts),
@@ -81,19 +86,64 @@ const SECTION_TYPES = {
   },
   languages: {
     icon: '🌐', side: true,
-    fields: [{ k: 'name', type: 'text' }, { k: 'level', type: 'select', options: LANGUAGE_LEVELS, optPrefix: 'lvl.' }],
-    view: (it, f) => ({ title: it.name, subtitle: it.level ? f.label('lvl.' + it.level) : '', level: it.level ? 5 - LANGUAGE_LEVELS.indexOf(it.level) : 0 }),
+    // icao: ICAO dil yeterlik seviyesi (Doc 9835) — havacılık personeli için 4 / 5 / 6
+    fields: [{ k: 'name', type: 'text' }, { k: 'level', type: 'select', options: LANGUAGE_LEVELS, optPrefix: 'lvl.' }, { k: 'icao', type: 'select', options: ICAO_LEVELS, optPrefix: 'icao.' }],
+    view: (it, f) => ({ title: it.name, subtitle: [it.level ? f.label('lvl.' + it.level) : '', it.icao ? f.label('icao.' + it.icao) : ''].filter(Boolean).join(' · '), level: it.level ? 5 - LANGUAGE_LEVELS.indexOf(it.level) : 0 }),
     summary: (it) => it.name,
     compact: true,
   },
   certificates: {
     icon: '📜', side: false,
     fields: [
-      { k: 'name', type: 'text' }, { k: 'issuer', type: 'text' }, { k: 'date', type: 'month' },
+      { k: 'name', type: 'text', list: 'certificate' }, { k: 'issuer', type: 'text' }, { k: 'date', type: 'month' }, { k: 'expiry', type: 'day' },
       { k: 'credentialId', type: 'text' }, { k: 'url', type: 'url' }, { k: 'description', type: 'textarea', rows: 2 },
     ],
-    view: (it, f) => ({ title: it.name, subtitle: it.issuer, date: f.month(it.date), extra: [it.credentialId && `${f.label('credentialId')}: ${it.credentialId}`, it.url].filter(Boolean).join(' · '), text: it.description }),
+    view: (it, f) => ({ title: it.name, subtitle: it.issuer, date: f.valid(it.date, it.expiry), extra: [it.credentialId && `${f.label('credentialId')}: ${it.credentialId}`, it.url].filter(Boolean).join(' · '), text: it.description }),
     summary: (it) => it.name,
+  },
+  /* ---- havacılık ---- */
+  licences: {
+    icon: '🪪', side: false,
+    fields: [
+      { k: 'name', type: 'text', list: 'licence' }, { k: 'authority', type: 'text', list: 'authority' },
+      { k: 'number', type: 'text' }, { k: 'date', type: 'month' }, { k: 'expiry', type: 'day' },
+      { k: 'description', type: 'textarea', rows: 2 },
+    ],
+    view: (it, f) => ({ title: it.name, subtitle: it.authority, date: f.valid(it.date, it.expiry), extra: it.number ? `${f.label('field.number')}: ${it.number}` : '', text: it.description }),
+    summary: (it) => [it.name, it.authority].filter(Boolean).join(' · '),
+  },
+  typeRatings: {
+    icon: '✈️', side: false,
+    fields: [
+      { k: 'aircraft', type: 'text', list: 'aircraft' }, { k: 'privilege', type: 'text', list: 'privilege' },
+      { k: 'date', type: 'month' }, { k: 'expiry', type: 'day' }, { k: 'description', type: 'textarea', rows: 2 },
+    ],
+    view: (it, f) => ({ title: it.aircraft, subtitle: it.privilege, date: f.valid(it.date, it.expiry), text: it.description }),
+    summary: (it) => [it.aircraft, it.privilege].filter(Boolean).join(' · '),
+  },
+  flightHours: {
+    icon: '🕑', side: false,
+    fields: [
+      { k: 'aircraft', type: 'text', list: 'aircraft' }, { k: 'category', type: 'select', options: AIRCRAFT_CATEGORIES, optPrefix: 'cat.' },
+      { k: 'total', type: 'number' }, { k: 'pic', type: 'number' }, { k: 'sic', type: 'number' }, { k: 'ifr', type: 'number' }, { k: 'night', type: 'number' },
+      { k: 'date', type: 'month' },
+    ],
+    view: (it, f) => {
+      const hours = {};
+      for (const k of HOUR_KEYS) hours[k] = Number(String(it[k] || '').replace(',', '.')) || 0;
+      const parts = HOUR_KEYS.filter((k) => hours[k]).map((k) => `${f.label('hrs.' + k)} ${fmtHours(hours[k], f.lang)} ${f.label('hrs.unit')}`);
+      return { title: it.aircraft, subtitle: it.category ? f.label('cat.' + it.category) : '', hours, extra: parts.join(' · '), date: it.date ? `${f.label('hrs.asOf')} ${f.month(it.date)}` : '' };
+    },
+    summary: (it) => [it.aircraft, it.total && `${it.total} h`].filter(Boolean).join(' · '),
+  },
+  medical: {
+    icon: '🩺', side: false,
+    fields: [
+      { k: 'medClass', type: 'select', options: MEDICAL_CLASSES, optPrefix: 'med.' }, { k: 'authority', type: 'text', list: 'authority' },
+      { k: 'date', type: 'month' }, { k: 'expiry', type: 'day' }, { k: 'limitations', type: 'text' },
+    ],
+    view: (it, f) => ({ title: it.medClass ? f.label('med.' + it.medClass) : '', subtitle: it.authority, date: f.valid(it.date, it.expiry), extra: it.limitations ? `${f.label('field.limitations')}: ${it.limitations}` : '' }),
+    summary: (it) => [it.medClass, it.authority].filter(Boolean).join(' · '),
   },
   courses: {
     icon: '📚', side: false,
@@ -191,6 +241,11 @@ const BUILTIN_TEMPLATES = [
   { id: 'professional', builtin: true, layout: 'banner', sidebarSide: 'end', accent: '#0f4c81', sidebarBg: '#f1f5f9', sidebarText: '#0f172a', font: 'calibri', fontSize: 10.5, headingStyle: 'line', photoShape: 'rect', density: 'normal', skillStyle: 'dots' },
   { id: 'minimal', builtin: true, layout: 'classic', sidebarSide: 'start', accent: '#0f766e', sidebarBg: '#f0fdfa', sidebarText: '#134e4a', font: 'arial', fontSize: 10, headingStyle: 'caps', photoShape: 'rounded', density: 'compact', skillStyle: 'text' },
   { id: 'elegant', builtin: true, layout: 'split', sidebarSide: 'end', accent: '#9d174d', sidebarBg: '#fdf2f8', sidebarText: '#500724', font: 'georgia', fontSize: 10, headingStyle: 'plain', photoShape: 'circle', density: 'relaxed', skillStyle: 'dots' },
+  // ATS uyumlu: tek sütun, standart başlıklar, fotoğraf/çubuk/simge yok, yaygın yazı tipi — otomatik taramada metin eksiksiz okunur
+  { id: 'ats', builtin: true, ats: true, layout: 'classic', sidebarSide: 'start', accent: '#1f2937', sidebarBg: '#f3f4f6', sidebarText: '#111827', font: 'arial', fontSize: 10.5, headingStyle: 'line', photoShape: 'none', density: 'normal', skillStyle: 'text' },
+  { id: 'atsSerif', builtin: true, ats: true, layout: 'classic', sidebarSide: 'start', accent: '#1e3a5f', sidebarBg: '#f3f4f6', sidebarText: '#111827', font: 'cambria', fontSize: 11, headingStyle: 'caps', photoShape: 'none', density: 'normal', skillStyle: 'text' },
+  { id: 'aviation', builtin: true, layout: 'banner', sidebarSide: 'end', accent: '#0b2e59', sidebarBg: '#eef3f9', sidebarText: '#0b1f3a', font: 'inter', fontSize: 10, headingStyle: 'bar', photoShape: 'rect', density: 'normal', skillStyle: 'dots' },
+  { id: 'europass', builtin: true, layout: 'classic', sidebarSide: 'start', accent: '#1d4e89', sidebarBg: '#f1f5f9', sidebarText: '#0f172a', font: 'arial', fontSize: 10, headingStyle: 'caps', photoShape: 'rect', density: 'compact', skillStyle: 'text' },
   { id: 'fresh', builtin: true, layout: 'sidebar', sidebarSide: 'end', accent: '#059669', sidebarBg: '#ecfdf5', sidebarText: '#064e3b', font: 'verdana', fontSize: 9.5, headingStyle: 'boxed', photoShape: 'rounded', density: 'normal', skillStyle: 'bars' },
 ];
 
@@ -208,6 +263,7 @@ function newItem(type) {
     if (f.type === 'check') it[f.k] = f.k === 'append';
     else if (f.type === 'range') it[f.k] = 3;
     else if (f.type === 'phones') it[f.k] = [newPhone()];
+    else if (f.type === 'number') it[f.k] = '';
     else if (f.type !== 'file') it[f.k] = '';
   }
   return it;
@@ -232,6 +288,9 @@ function newCv(name) {
     personalOrder: PERSONAL_FIELDS.map((f) => f.k),
     customFields: [],
     design: pickDesign(BUILTIN_TEMPLATES[0]),
+    targetCountry: '',
+    qr: { on: false, kind: 'vcard', url: '' },
+    coverLetters: [],
     sections: ['summary', 'experience', 'education', 'skills', 'languages', 'certificates', 'references', 'documents'].map((t) => newSection(t)),
   };
 }
@@ -274,6 +333,11 @@ function normalizeCv(cv) {
     }
   }
   cv.lang = cv.lang || 'auto';
+  // 2.2: hedef ülke (ülkeye göre öneriler), QR kod, ön yazılar, çeviri bağı
+  if (typeof cv.targetCountry !== 'string') cv.targetCountry = '';
+  cv.qr = Object.assign({ on: false, kind: 'vcard', url: '' }, cv.qr);
+  if (!Array.isArray(cv.coverLetters)) cv.coverLetters = [];
+  if (cv.translation && typeof cv.translation !== 'object') delete cv.translation;
   return cv;
 }
 

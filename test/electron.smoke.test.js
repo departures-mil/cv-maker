@@ -43,5 +43,9 @@ test('Electron: pencere yüklenir, çekirdek ve düzenleyici başlar, tam ekran'
   assert.strictEqual(o.settings[o.settings.length - 1], 'contact', 'Admin ile iletişim en sonda: ' + o.settings.join(','));
   for (const k of ['look', 'cv-export', 'cv-data', 'usage', 'crash', 'about']) assert.ok(o.settings.includes(k), 'ayarlar kartı ' + k);
   assert.ok(o.pdfFonts.some((f) => /NotoSansArabic/.test(f)) && o.pdfFonts.some((f) => /^Inter/.test(f)), 'PDF\'e gömülü yazı tipleri: ' + o.pdfFonts);
+  // 2.2: havacılık CV'si, analiz, çeviri, başvuru, ön yazı, JSON Resume / Europass, sürüm geçmişi, Ayarlar kartları
+  assert.strictEqual(o.pro.ok, true, '2.2 senaryosu: ' + JSON.stringify(o.pro));
+  for (const k of ['cv-ai', 'cv-privacy']) assert.ok(o.settings.includes(k), 'ayarlar kartı ' + k);
+  assert.strictEqual(o.pdfMeta, true, 'PDF üst bilgisi');
   assert.strictEqual(o.ok, true);
 });

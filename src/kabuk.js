@@ -1,19 +1,21 @@
 /* CV Maker — ortak çekirdek kabuğu (src/cekirdek/fc-core.js).
    Burada: "klasik" renk şeması (2.0.x'in eski renkleri), sağ üst sıra (🔔 · ✦ · Eşitle · Güncelle · Tema · Dil | Küçült · Orta ·
    Tam ekran · Kapat), dil ve tema bağı (uygulama ↔ çekirdek), ayarlar düzeni (Admin ile iletişim EN SON), Kullanım Limitleri
-   ("hizmet yok" kipi), ilk açılış rehberi (yalnız dil + görünüm), "neler yeni", duyurular, çökme raporu ve güncelleme öncesi yedek.
+   (yapay zekâ çağrıları; Firebase yok), ilk açılış rehberi (dil + görünüm + isteğe bağlı yapay zekâ anahtarı), "neler yeni", duyurular, çökme raporu ve güncelleme öncesi yedek.
    app.js'ten ÖNCE yüklenir; app.js Kabuk.start(...) ile çağırır.
    CV Maker tek kullanıcılık bir masaüstü aracıdır: bulut ya da Wi-Fi eşitlemesi YOKTUR (Eşitle düğmesi "kapalı" durumdadır ve
    verileri taşıma/yedekleme yollarını gösterir). */
 (function () {
   'use strict';
   var APP = 'cv-maker', REPO = 'cv-maker';
-  var OB = { firebase: false, ai: false };   // Firebase ve yapay zekâ kullanılmaz → sihirbaz yalnız dil + görünüm
+  // 2.2: yapay zekâ özellikleri kullanıcının KENDİ anahtarıyla (isteğe bağlı) → sihirbazda dil + görünüm + yapay zekâ anahtarı; Firebase yok
+  var OB = { firebase: false, ai: true };
   var ui = FC.ui;
   Object.assign(ui.icons, {
     save: '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/>',
     folder: '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
     file: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/>',
+    shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
     keyboard: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M6 13h.01M18 13h.01M8 16h8"/>'
   });
 
@@ -140,7 +142,7 @@
   function openSettings(appCards) {
     var body = ui.el('div');
     var m = ui.modal({ title: T('settings'), icon: 'settings', cls: 'wide cv-settings', body: body, buttons: [] });
-    FC.settings.build(body, { cards: appCards, usage: { firebase: false, ai: false }, about: { version: cfg.version }, onboarding: OB });
+    FC.settings.build(body, { cards: appCards, usage: { firebase: false }, about: { version: cfg.version }, onboarding: OB });
     return m;
   }
 
