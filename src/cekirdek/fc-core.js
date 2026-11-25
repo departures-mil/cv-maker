@@ -948,8 +948,8 @@
      FC.contact.mount(ayarlarKapsayicisi)     // kart kapsayıcının SON kartı olur ve öyle kalır
      FC.contact.send({tur:'oneri'|'hata', mesaj, iletisim})  → 'sent' | 'queued'
    Firestore REST (proje comm-calc-103111111, koleksiyon mesajlar, yalnız ekleme). Gönderilemeyen yerel kuyruğa alınır,
-   internet gelince yeniden denenir. Kullanıcı mesajında gelen kutusu ulaşılamazsa yedek FormSubmit kullanılır
-   (adres programda açık yazılmaz). Çökme raporları yalnız gelen kutusuna gider. */
+   internet gelince yeniden denenir. Programda hiçbir kişisel e-posta adresi bulunmaz (yedek e-posta yolu yok).
+   Çökme raporları da yalnız gelen kutusuna gider. */
 (function (g) {
   'use strict';
   var FC = g.FC = g.FC || {};
@@ -958,7 +958,6 @@
   var cfg = { app: '', version: '' }, flushing = false, subs = [];
   function T(k, v) { return FC.t(k, v); }
   function S() { return FC.storage; }
-  function to() { return g.atob('').split('').reverse().join(''); }
   function deviceId() {
     var id = S().get('device');
     if (!id) {
@@ -990,13 +989,8 @@
     return fetchFn()(INBOX, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       .then(function (r) { return r.ok; }, function () { return false; });
   }
-  function mail(f) {
-    var body = { _subject: (f.uygulama || 'Uygulama') + ': ' + f.tur, _template: 'table', _captcha: 'false', Tur: f.tur, Mesaj: f.mesaj, Uygulama: f.uygulama, Surum: f.surum, Platform: f.platform, Dil: f.dil, Cihaz: f.cihaz };
-    if (f.iletisim) { body.Iletisim = f.iletisim; if (/@/.test(f.iletisim)) body._replyto = f.iletisim; }
-    return fetchFn()('https://formsubmit.co/ajax/' + to(), { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(body) })
-      .then(function (r) { return r.json().catch(function () { return {}; }); })
-      .then(function (j) { return String(j.success) === 'true'; }, function () { return false; });
-  }
+  /* Yedek e-posta yolu kaldırıldı: programda hiçbir kişisel adres bulunmaz. Gelen kutusuna ulaşılamayan mesaj kuyrukta bekler, sonra yeniden denenir. */
+  function mail() { return Promise.resolve(false); }
   function deliver(item) {
     return inbox(item.f).then(function (ok) {
       if (ok) return true;

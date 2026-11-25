@@ -344,7 +344,7 @@ function canUseBundle(m) {
 //     except the admin in the Firebase console). Works from any network/app, no activation needed.
 //  2) E-mail copy via FormSubmit. FormSubmit rejects requests without a Referer and needs a one-time activation
 //     per sending site, so the request carries the site that is already activated.
-const ADMIN_TO = Buffer.from('', 'base64').toString().split('').reverse().join('');
+const ADMIN_TO = ''; // test kopyası: kişisel e-posta adresi çıkarıldı
 const ADMIN_INBOX = { projectId: 'comm-calc-103111111', apiKey: 'AIzaSyB12RFS6ENPpmnnPsETfjedNH-3hmNWQvA' };
 async function sendToInbox(m) {
   const F = (v) => ({ stringValue: String(v || '').slice(0, 4000) });
