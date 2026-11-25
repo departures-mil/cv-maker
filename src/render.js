@@ -38,6 +38,7 @@ function formatter(lang) {
   const monthFmt = new Intl.DateTimeFormat(loc, { month: 'short', year: 'numeric' });
   const dayFmt = new Intl.DateTimeFormat(loc, { day: 'numeric', month: 'long', year: 'numeric' });
   const f = {
+    lang,
     label: (k) => tr(lang, k),
     phoneText: (p) => (p.apps && p.apps.length ? `${p.value} (${p.apps.map((a) => tr(lang, 'ch.' + a)).join(lang === 'ar' ? '، ' : ', ')})` : String(p.value || '')),
     month(v) {
@@ -50,8 +51,16 @@ function formatter(lang) {
     day(v) {
       if (!v) return '';
       const [y, m, d] = String(v).split('-').map(Number);
+      if (y && m && !d) return f.month(v);
       if (!y || !m || !d) return String(v);
       return dayFmt.format(new Date(y, m - 1, d));
+    },
+    /* Belge tarihi + geçerlilik sonu: "Mar 2021 · Geçerlilik: 12 Mart 2027" */
+    valid(date, expiry) {
+      const a = f.month(date), b = f.day(expiry);
+      if (!b) return a;
+      const v = `${tr(lang, 'validUntil')} ${b}`;
+      return a ? `${a} · ${v}` : v;
     },
     range(a, b, current) {
       const s = f.month(a);
@@ -126,7 +135,47 @@ function buildModel(cv, uiLang) {
     attachedLabel: tr(lang, 'attachedAtEnd'),
     sections,
     attachments,
+    qr: cvQrSvg(cv, lang),
+    qrLabel: cv.qr && cv.qr.on ? tr(lang, cv.qr.kind === 'vcard' ? 'qr.scanContact' : 'qr.scanLink') : '',
   };
+}
+
+/* ---------- QR kod (qrcode-generator, çevrim dışı) ---------- */
+function vcardText(cv) {
+  const P = cv.personal;
+  const v = (k) => (P[k] && P[k].visible !== false ? String(P[k].value || '').trim() : '');
+  const e = (x) => x.replace(/([\\;,])/g, '\\$1').replace(/\n/g, ' ');
+  const name = v('fullName');
+  const parts = name.split(/\s+/);
+  const out = ['BEGIN:VCARD', 'VERSION:3.0', `N:${e(parts.length > 1 ? parts.slice(-1).join(' ') : name)};${e(parts.length > 1 ? parts.slice(0, -1).join(' ') : '')};;;`, `FN:${e(name)}`];
+  if (v('jobTitle')) out.push(`TITLE:${e(v('jobTitle'))}`);
+  if (P.phone.visible !== false) for (const n of P.phone.numbers || []) if (String(n.value || '').trim()) out.push(`TEL;TYPE=CELL:${String(n.value).replace(/[^+\d]/g, '')}`);
+  if (v('email')) out.push(`EMAIL:${v('email')}`);
+  for (const k of ['website', 'linkedin', 'github']) if (v(k)) out.push(`URL:${v(k)}`);
+  if (v('address')) out.push(`ADR:;;${e(v('address'))};;;;`);
+  out.push('END:VCARD');
+  return out.join('\r\n');
+}
+function cvQrText(cv) {
+  if (!cv.qr || !cv.qr.on) return '';
+  if (cv.qr.kind === 'vcard') return vcardText(cv);
+  const P = cv.personal;
+  const pick = (k) => (P[k] && String(P[k].value || '').trim()) || '';
+  const url = cv.qr.kind === 'url' ? String(cv.qr.url || '').trim() : pick(cv.qr.kind);
+  return url;
+}
+function cvQrSvg(cv, lang) {
+  const text = cvQrText(cv);
+  if (!text || typeof qrcode !== 'function') return '';
+  try {
+    qrcode.stringToBytes = qrcode.stringToBytesFuncs['UTF-8'];
+    const q = qrcode(0, text.length > 300 ? 'L' : 'M');
+    q.addData(text, 'Byte');
+    q.make();
+    return q.createSvgTag({ cellSize: 2, margin: 0, scalable: true });
+  } catch (e) {
+    return '';
+  }
 }
 
 /* ---------- HTML ---------- */
@@ -169,6 +218,8 @@ function sectionHtml(sec, m) {
       </div>`).join('')}</div>`;
   } else if (sec.type === 'summary') {
     body = sec.items.map((it) => textBlock(it.text)).join('');
+  } else if (sec.type === 'flightHours') {
+    body = hoursTableHtml(sec, m);
   } else {
     body = sec.items.map((it) => `
       <div class="cv-item">
@@ -204,6 +255,22 @@ function detailsHtml(m, asSection) {
 }
 
 const photoHtml = (m) => (m.photo ? `<div class="cv-photo"><img src="${m.photo}" alt=""></div>` : '');
+const qrHtml = (m) => (m.qr ? `<div class="cv-qr">${m.qr}${m.qrLabel ? `<span>${esc(m.qrLabel)}</span>` : ''}</div>` : '');
+
+/* Uçuş saatleri: uçak tipine göre tablo + toplam satırı */
+function hoursTableHtml(sec, m) {
+  const L = (k) => esc(tr(m.lang, k));
+  const cols = HOUR_KEYS.filter((k) => sec.items.some((it) => it.hours && it.hours[k]));
+  if (!cols.length) return sec.items.map((it) => `<div class="cv-item"><div class="cv-item-title">${esc(it.title)}</div></div>`).join('');
+  const sum = {};
+  for (const k of cols) sum[k] = sec.items.reduce((a, it) => a + ((it.hours && it.hours[k]) || 0), 0);
+  const row = (it) => `<tr><th scope="row">${esc(it.title || '')}${it.subtitle ? `<small>${esc(it.subtitle)}</small>` : ''}</th>${cols.map((k) => `<td>${esc(fmtHours(it.hours[k], m.lang))}</td>`).join('')}</tr>`;
+  const asOf = sec.items.map((it) => it.date).filter(Boolean)[0] || '';
+  return `<table class="cv-hours"><thead><tr><th>${L('field.aircraft')}</th>${cols.map((k) => `<th>${L('hrs.' + k)}</th>`).join('')}</tr></thead>
+    <tbody>${sec.items.map(row).join('')}</tbody>
+    ${sec.items.length > 1 ? `<tfoot><tr><th scope="row">${L('hrs.sum')}</th>${cols.map((k) => `<td>${esc(fmtHours(sum[k], m.lang))}</td>`).join('')}</tr></tfoot>` : ''}
+  </table>${asOf ? `<div class="cv-item-extra">${esc(asOf)} · ${L('hrs.unitLong')}</div>` : `<div class="cv-item-extra">${L('hrs.unitLong')}</div>`}`;
+}
 
 function renderCvHtml(m) {
   const d = m.design;
@@ -221,6 +288,7 @@ function renderCvHtml(m) {
       <aside class="cv-side">
         ${photoHtml(m)}
         ${m.contacts.length ? `<section class="cv-sec sec-contact"><h2 class="cv-h"><span>${esc(m.contactTitle)}</span></h2>${contactsHtml(m, 'cv-contacts col')}</section>` : ''}
+        ${qrHtml(m)}
         ${detailsHtml(m, true)}
         ${sideSecs.map((s) => sectionHtml(s, m)).join('')}
       </aside>
@@ -233,6 +301,7 @@ function renderCvHtml(m) {
       <header class="cv-banner">
         ${photoHtml(m)}
         <div class="cv-banner-text">${name}${contactsHtml(m, 'cv-contacts row')}</div>
+        ${qrHtml(m)}
       </header>
       <div class="cv-cols">
         <main class="cv-main">${mainSecs.map((s) => sectionHtml(s, m)).join('')}</main>
@@ -243,6 +312,7 @@ function renderCvHtml(m) {
       <header class="cv-header split">
         ${photoHtml(m)}
         <div class="cv-header-text">${name}${contactsHtml(m, 'cv-contacts row')}</div>
+        ${qrHtml(m)}
       </header>
       <div class="cv-cols">
         <main class="cv-main">${mainSecs.map((s) => sectionHtml(s, m)).join('')}</main>
@@ -252,6 +322,7 @@ function renderCvHtml(m) {
     inner = `
       <header class="cv-header classic">
         <div class="cv-header-text">${name}${contactsHtml(m, 'cv-contacts row')}</div>
+        ${qrHtml(m)}
         ${photoHtml(m)}
       </header>
       ${detailsHtml(m, true)}
@@ -334,6 +405,22 @@ const CV_CSS = `
 .cv-photo img { display: block; width: 32mm; height: 42mm; object-fit: cover; }
 .cv.photo-rounded .cv-photo img { border-radius: 10px; }
 .cv.photo-circle .cv-photo img { width: 36mm; height: 36mm; border-radius: 50%; }
+
+.cv-qr { display: flex; flex-direction: column; align-items: center; gap: 2px; flex: none; }
+.cv-qr svg { width: 22mm; height: 22mm; display: block; background: #fff; padding: 1.2mm; border-radius: 2px; }
+.cv-qr svg path, .cv-qr svg rect[fill="black"] { fill: #111827; }
+.cv-qr span { font-size: .75em; opacity: .8; max-width: 26mm; text-align: center; line-height: 1.2; }
+.cv.layout-sidebar .cv-side .cv-qr { margin-top: calc(var(--gap) * 1.6); }
+.cv.layout-banner .cv-banner .cv-qr, .cv.layout-split .cv-header .cv-qr { margin-inline-start: auto; }
+.cv-header.classic .cv-header-text { flex: 1; }
+.cv-hours { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; break-inside: avoid; }
+.cv-hours th, .cv-hours td { padding: 3px 6px; border-bottom: 1px solid #e5e7eb; text-align: end; white-space: nowrap; }
+.cv-hours thead th { color: var(--accent); font-size: .9em; border-bottom: 1.5px solid var(--accent); }
+.cv-hours th:first-child { text-align: start; white-space: normal; }
+.cv-hours tbody th { font-weight: 600; }
+.cv-hours tbody th small { display: block; font-weight: 400; color: #6b7280; font-size: .85em; }
+.cv-hours tfoot th, .cv-hours tfoot td { font-weight: 700; border-bottom: 0; border-top: 1.5px solid #9ca3af; }
+.cv-hours + .cv-item-extra { margin-top: 3px; }
 
 /* classic */
 .cv.layout-classic { padding: 14mm 16mm; }

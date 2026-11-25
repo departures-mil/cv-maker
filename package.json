@@ -1,7 +1,7 @@
 {
   "name": "cv-maker",
   "productName": "CV Maker",
-  "version": "2.1.3",
+  "version": "2.2.0",
   "description": "CV Maker",
   "main": "main.js",
   "private": true,
@@ -10,13 +10,14 @@
     "build": "node scripts/build.js",
     "eski-kanal": "node tools/eski-kanal.js",
     "ekran": "node tools/ekran.js",
-    "test": "node test/datastore.test.js && node --test test/main.smoke.test.js test/eski-kanal.test.js test/cekirdek.test.js test/electron.smoke.test.js",
+    "test": "node test/datastore.test.js && node --test test/pro.test.js test/main.smoke.test.js test/eski-kanal.test.js test/cekirdek.test.js test/electron.smoke.test.js",
     "test:electron": "node --test test/electron.smoke.test.js"
   },
   "dependencies": {
     "docx": "^9.14.0",
     "pdf-lib": "^1.17.1",
-    "pdfjs-dist": "^3.11.174"
+    "pdfjs-dist": "^3.11.174",
+    "qrcode-generator": "^1.4.4"
   },
   "devDependencies": {
     "electron": "^38.8.6",

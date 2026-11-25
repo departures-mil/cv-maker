@@ -21,6 +21,11 @@ contextBridge.exposeInMainWorld('api', {
   saveCvsSync: (d) => ipcRenderer.sendSync('store:saveCvsSync', d),
   saveSettingsSync: (d) => ipcRenderer.sendSync('store:saveSettingsSync', d),
   saveText: (o) => ipcRenderer.invoke('file:saveText', o),
+  securityGet: () => ipcRenderer.invoke('security:get'),
+  securitySet: (on) => ipcRenderer.invoke('security:set', on),
+  historySnapshot: (cv) => ipcRenderer.invoke('history:snapshot', cv),
+  historyList: (cvId) => ipcRenderer.invoke('history:list', cvId),
+  historyRead: (cvId, name) => ipcRenderer.invoke('history:read', { cvId, name }),
 
   pickAttachments: (o) => ipcRenderer.invoke('attach:pick', o),
   readAttachment: (id) => ipcRenderer.invoke('attach:read', id),

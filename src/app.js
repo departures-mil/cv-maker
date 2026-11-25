@@ -1,6 +1,7 @@
 'use strict';
 /* global PHONE_CHANNELS, newPhone, I18N, tr, SECTION_TYPES, PERSONAL_FIELDS, LANGUAGE_LEVELS, FONTS, BUILTIN_TEMPLATES, DESIGN_KEYS,
-   pickDesign, newItem, newSection, newCv, normalizeCv, buildSample, buildModel, renderCvHtml, exportHtmlDocument, uid, pdfjsLib */
+   pickDesign, newItem, newSection, newCv, normalizeCv, buildSample, buildModel, renderCvHtml, exportHtmlDocument, uid, pdfjsLib,
+   Pro, Apps, AV, CHK, AIX, FC, Kabuk */
 
 // window.api is provided by preload.js
 const $ = (s, r = document) => r.querySelector(s);
@@ -13,6 +14,9 @@ const S = {
   tab: 'content',
   open: new Set(),
   history: { stack: [], index: -1 },
+  applications: [],   // 2.2: başvuru takibi (cvs.json içinde, CV'lerle birlikte yedeklenir)
+  pages: 1,
+  posting: '',
 };
 
 // 2.0.x'teki theme / autoUpdate / updateNotify / updateUrl artık kullanılmıyor (görünüm ve güncelleme ortak çekirdekte);
@@ -23,6 +27,7 @@ const DEFAULT_SETTINGS = {
   zoom: 'fit',
   lastCvId: null,
   customTemplates: [],
+  expiryDays: 90,     // belge geçerlilik hatırlatması (gün)
 };
 
 /* ---------- helpers ---------- */
@@ -74,12 +79,15 @@ function toast(msg, kind = 'info', ms = 3200) {
 // Set while the data on disk is being replaced (backup restore / import) so that
 // nothing in memory is written over it.
 let saveLocked = false;
+/** cvs.json'un tamamı: CV'ler + başvurular. */
+const dataDoc = () => ({ version: 1, cvs: S.cvs, applications: S.applications });
 const persistCvs = debounce(() => {
-  if (!saveLocked) api.saveCvs({ version: 1, cvs: S.cvs });
+  if (!saveLocked) api.saveCvs(dataDoc());
 }, 400);
+const persistApps = persistCvs;
 window.addEventListener('beforeunload', () => {
   if (saveLocked) return;
-  api.saveCvsSync({ version: 1, cvs: S.cvs });
+  api.saveCvsSync(dataDoc());
   api.saveSettingsSync(S.settings);
 });
 const persistSettings = debounce(() => { if (!saveLocked) api.saveSettings(S.settings); }, 200);
@@ -88,7 +96,7 @@ const persistSettings = debounce(() => { if (!saveLocked) api.saveSettings(S.set
 async function replaceDataAndReload(fn) {
   persistCvs.flush();
   persistSettings.flush();
-  api.saveCvsSync({ version: 1, cvs: S.cvs });
+  api.saveCvsSync(dataDoc());
   api.saveSettingsSync(S.settings);
   saveLocked = true;
   try {
@@ -146,6 +154,7 @@ function changed(structural = false) {
   S.cur.updatedAt = Date.now();
   persistCvs();
   pushHistory();
+  Apps.onChanged();
   schedulePreview();
   if (structural) renderEditor();
 }
@@ -164,6 +173,9 @@ async function boot() {
     S.settings.uiLang = ['tr', 'en', 'ar'].includes(nav) ? nav : 'tr';
   }
   S.cvs = (stored.cvs && stored.cvs.cvs) || [];
+  S.applications = (stored.cvs && Array.isArray(stored.cvs.applications)) ? stored.cvs.applications : [];
+  // şifreli veriler bu Windows hesabında açılamadıysa hiçbir şey üzerine yazılmaz
+  if (stored.cvsError) saveLocked = true;
   S.cvs.forEach(normalizeCv);
   if (!S.cvs.length) {
     S.cvs.push(normalizeCv(buildSample(S.settings.uiLang)));
@@ -177,7 +189,7 @@ async function boot() {
   Kabuk.start({
     info: S.info, version: S.info.version, stored, uiLang: S.settings.uiLang,
     lang: (l) => { if (l !== S.settings.uiLang) { setSetting('uiLang', l); applyLanguage(); } },
-    flush: () => { persistCvs.flush(); persistSettings.flush(); api.saveCvsSync({ version: 1, cvs: S.cvs }); api.saveSettingsSync(S.settings); },
+    flush: () => { persistCvs.flush(); persistSettings.flush(); api.saveCvsSync(dataDoc()); api.saveSettingsSync(S.settings); },
     syncButtons: () => [
       { label: t('cvExportFile'), icon: 'file', action: exportCvFile },
       { label: t('backupNow'), icon: 'save', action: backupNowAction },
@@ -192,7 +204,10 @@ async function boot() {
     const mg = S.info.migration;
     setTimeout(() => toast(t('migrated', { n: mg.total, added: mg.added + mg.updated }), 'ok', 9000), 1200);
   }
-  gcAttachments();
+  if (!saveLocked) gcAttachments();
+  if (stored.cvsError) setTimeout(() => modal({ title: t('sec.lockedTitle'), body: h('p', null, t('sec.lockedBody', { dir: S.info.dataDir })), buttons: [{ label: t('openFolder'), action: () => api.openDataDir() }, { label: t('ok'), kind: 'primary' }] }), 800);
+  // 2.2: belge geçerlilik ve başvuru hatırlatmaları, sürüm geçmişinin ilk anlık görüntüsü
+  setTimeout(() => { Pro.remindExpiry(); Apps.remindApps(); if (!saveLocked) Apps.forceSnap(); }, 2500);
 }
 
 function gcAttachments() {
@@ -222,11 +237,15 @@ function bindTopbar() {
   $('#btn-redo').onclick = () => undoRedo(1);
   $('#cv-select').onchange = (e) => switchCv(e.target.value);
   $('#btn-cv-menu').onclick = (e) => openMenu(e.currentTarget, [
-    { label: t('cvNew'), icon: '＋', action: newCvAction },
+    { label: t('cvNew'), icon: '＋', action: () => Apps.newCvDialog() },
     { label: t('cvDuplicate'), icon: '⧉', action: duplicateCv },
     { label: t('cvRename'), icon: '✎', action: renameCv },
+    { label: t('hist.title'), icon: '🕘', action: () => Apps.historyDialog() },
+    { label: t('app.addWithCv'), icon: '🗂', action: () => Apps.editApp(null, S.cur) },
     '-',
     { label: t('cvImport'), icon: '⇩', action: importCv },
+    { label: t('imp.linkedin'), icon: 'in', action: () => Apps.importLinkedIn() },
+    { label: t('imp.jsonResume'), icon: '{ }', action: () => Apps.importJsonResume() },
     { label: t('cvExportFile'), icon: '⇧', action: exportCvFile },
     '-',
     { label: t('cvDelete'), icon: '🗑', danger: true, action: deleteCv, disabled: S.cvs.length < 2 },
@@ -235,6 +254,12 @@ function bindTopbar() {
     { label: t('exportPdf'), icon: '📄', action: exportPdf },
     { label: t('exportDocx'), icon: '📝', action: exportDocx },
     { label: t('exportJpeg'), icon: '🖼', action: exportJpeg },
+    '-',
+    { label: t('share.title'), icon: '🔒', action: () => Pro.shareExport() },
+    { label: t('cl.title'), icon: '✉', action: () => Pro.coverLetterDialog() },
+    '-',
+    { label: t('exp.europass'), icon: '🇪🇺', action: () => Apps.exportEuropass() },
+    { label: t('exp.jsonResume'), icon: '{ }', action: () => Apps.exportJsonResume() },
   ]);
   $('#btn-settings').onclick = openSettings;
   for (const tab of document.querySelectorAll('.tab')) {
@@ -259,13 +284,14 @@ function bindTopbar() {
 
 function renderCvSelect() {
   const sel = $('#cv-select');
-  sel.replaceChildren(...S.cvs.map((c) => h('option', { value: c.id }, c.name || 'CV')));
+  sel.replaceChildren(...S.cvs.map((c) => h('option', { value: c.id }, Pro.cvLabel(c))));
   sel.value = S.cur.id;
 }
 
 function switchCv(id) {
   const cv = S.cvs.find((c) => c.id === id);
   if (!cv) return;
+  if (S.cur && S.cur !== cv) Apps.snapNow(S.cur);
   S.cur = cv;
   setSetting('lastCvId', id);
   S.open.clear();
@@ -443,7 +469,7 @@ function move(arr, i, d) {
 function renderEditor() {
   const ed = $('#editor');
   const scroll = ed.scrollTop;
-  ed.replaceChildren(S.tab === 'design' ? designPanel() : contentPanel());
+  ed.replaceChildren(S.tab === 'design' ? designPanel() : S.tab === 'analysis' ? Pro.analysisPanel() : S.tab === 'apps' ? Apps.appsPanel() : contentPanel());
   ed.scrollTop = scroll;
   updateUndoButtons();
 }
@@ -467,6 +493,8 @@ function card({ id, title, icon, badge, open, actions, body, hidden, handle = tr
 function contentPanel() {
   const cv = S.cur;
   const wrap = h('div', { class: 'panel' });
+  const banner = Pro.banner();
+  if (banner) wrap.append(banner);
   wrap.append(photoCard(), personalCard());
 
   const list = h('div', { class: 'section-list' }, cv.sections.map((s, i) => sectionCard(s, i)));
@@ -519,14 +547,20 @@ function photoCard() {
   });
 }
 
+/* Fotoğraf düzenleyici: kırpma (vesikalık 3:4, biyometrik 35×45, kare), döndürme, parlaklık/kontrast ve
+   arka planı düz renge çevirme (kenarlardan başlayan bölge büyütme; düz duvar önünde çekilmiş fotoğraflar için, çevrim dışı). */
 function openCropper(src) {
-  const W = 300, H = 400;
+  const ASPECTS = { '3:4': [300, 400], '35:45': [300, 386], '1:1': [320, 320] };
+  let [W, H] = ASPECTS['3:4'];
   const canvas = h('canvas', { width: W * 2, height: H * 2, class: 'crop-canvas', style: `width:${W}px;height:${H}px` });
   const ctx = canvas.getContext('2d');
   const img = new Image();
+  let source = null;    // işlenmiş görüntü (canvas)
+  let base = null;      // en çok 1400 px'e küçültülmüş özgün görüntü
   const st = { scale: 1, min: 1, x: 0, y: 0, rot: 0 };
+  const fx = { bg: 'none', tol: 30, bright: 0, contrast: 0 };
   const zoom = h('input', { type: 'range', min: 1, max: 4, step: 0.01, value: 1, class: 'range' });
-  const dims = () => (st.rot % 180 === 0 ? [img.width, img.height] : [img.height, img.width]);
+  const dims = () => (st.rot % 180 === 0 ? [source.width, source.height] : [source.height, source.width]);
   const clamp = () => {
     const [iw, ih] = dims();
     const w = iw * st.scale, hgt = ih * st.scale;
@@ -534,14 +568,15 @@ function openCropper(src) {
     st.y = Math.min(0, Math.max(H * 2 - hgt, st.y));
   };
   const draw = (target = ctx, k = 1) => {
+    if (!source) return;
     clamp();
     const [iw, ih] = dims();
-    target.fillStyle = '#fff';
+    target.fillStyle = fx.bg !== 'none' ? fx.bg : '#fff';
     target.fillRect(0, 0, W * 2 * k, H * 2 * k);
     target.save();
     target.translate((st.x + (iw * st.scale) / 2) * k, (st.y + (ih * st.scale) / 2) * k);
     target.rotate((st.rot * Math.PI) / 180);
-    target.drawImage(img, (-img.width * st.scale * k) / 2, (-img.height * st.scale * k) / 2, img.width * st.scale * k, img.height * st.scale * k);
+    target.drawImage(source, (-source.width * st.scale * k) / 2, (-source.height * st.scale * k) / 2, source.width * st.scale * k, source.height * st.scale * k);
     target.restore();
   };
   const fit = () => {
@@ -551,7 +586,70 @@ function openCropper(src) {
     st.x = (W * 2 - iw * st.scale) / 2;
     st.y = (H * 2 - ih * st.scale) / 2;
   };
-  img.onload = () => { fit(); draw(); };
+  const hex = (c) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
+  /** Arka plan maskesi: kenar piksellerinden komşuya benzer renklerle büyür (0 = kişi, 1 = arka plan), yumuşatılır. */
+  function bgMask(data, w, hh, tol) {
+    const n = w * hh, mask = new Float32Array(n), seen = new Uint8Array(n), q = new Int32Array(n);
+    let qa = 0, qb = 0, mr = 0, mg = 0, mb = 0, cnt = 0;
+    const push = (i) => { if (!seen[i]) { seen[i] = 1; q[qb++] = i; } };
+    for (let x = 0; x < w; x++) { push(x); push((hh - 1) * w + x); }
+    for (let y = 0; y < hh; y++) { push(y * w); push(y * w + w - 1); }
+    for (let i = 0; i < qb; i++) { const p = q[i] * 4; mr += data[p]; mg += data[p + 1]; mb += data[p + 2]; cnt++; }
+    mr /= cnt; mg /= cnt; mb /= cnt;
+    const far = (tol * 2.2) ** 2, near = (tol * 0.55) ** 2;
+    const d2 = (p, r, g, b) => (data[p] - r) ** 2 + (data[p + 1] - g) ** 2 + (data[p + 2] - b) ** 2;
+    // kenardaki pikseller ortalamadan çok farklıysa (kişi kenara değiyorsa) tohum sayılmaz
+    const seeds = q.slice(0, qb).filter((i) => d2(i * 4, mr, mg, mb) < far);
+    seen.fill(0); qa = 0; qb = 0;
+    for (const i of seeds) push(i);
+    while (qa < qb) {
+      const i = q[qa++], p = i * 4;
+      mask[i] = 1;
+      const x = i % w, y = (i / w) | 0;
+      for (const j of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, y > 0 ? i - w : -1, y < hh - 1 ? i + w : -1]) {
+        if (j < 0 || seen[j]) continue;
+        const pj = j * 4;
+        if (d2(pj, data[p], data[p + 1], data[p + 2]) < near && d2(pj, mr, mg, mb) < far) push(j);
+      }
+    }
+    // yumuşatma: iki geçişli kutu bulanıklığı (saç ve omuz kenarları)
+    const tmp = new Float32Array(n), R = 2;
+    for (let pass = 0; pass < 2; pass++) {
+      for (let y = 0; y < hh; y++) for (let x = 0; x < w; x++) { let a = 0, c = 0; for (let k = -R; k <= R; k++) { const xx = x + k; if (xx >= 0 && xx < w) { a += mask[y * w + xx]; c++; } } tmp[y * w + x] = a / c; }
+      for (let y = 0; y < hh; y++) for (let x = 0; x < w; x++) { let a = 0, c = 0; for (let k = -R; k <= R; k++) { const yy = y + k; if (yy >= 0 && yy < hh) { a += tmp[yy * w + x]; c++; } } mask[y * w + x] = a / c; }
+    }
+    return mask;
+  }
+  function process() {
+    if (!base) return;
+    const c = document.createElement('canvas');
+    c.width = base.width; c.height = base.height;
+    const g = c.getContext('2d');
+    g.drawImage(base, 0, 0);
+    if (fx.bg !== 'none' || fx.bright || fx.contrast) {
+      const id = g.getImageData(0, 0, c.width, c.height), d = id.data;
+      const mask = fx.bg !== 'none' ? bgMask(d, c.width, c.height, fx.tol) : null;
+      const [br, bgc, bb] = fx.bg !== 'none' ? hex(fx.bg) : [0, 0, 0];
+      const cf = (259 * (fx.contrast * 2.55 + 255)) / (255 * (259 - fx.contrast * 2.55));
+      const adj = (v) => Math.max(0, Math.min(255, cf * (v + fx.bright * 1.6 - 128) + 128));
+      for (let i = 0, k = 0; i < d.length; i += 4, k++) {
+        let r = adj(d[i]), gg = adj(d[i + 1]), b = adj(d[i + 2]);
+        if (mask) { const m = mask[k]; r = r * (1 - m) + br * m; gg = gg * (1 - m) + bgc * m; b = b * (1 - m) + bb * m; }
+        d[i] = r; d[i + 1] = gg; d[i + 2] = b;
+      }
+      g.putImageData(id, 0, 0);
+    }
+    source = c;
+    draw();
+  }
+  const reprocess = debounce(process, 120);
+  img.onload = () => {
+    const k = Math.min(1, 1400 / Math.max(img.width, img.height));
+    base = document.createElement('canvas');
+    base.width = Math.round(img.width * k); base.height = Math.round(img.height * k);
+    base.getContext('2d').drawImage(img, 0, 0, base.width, base.height);
+    source = base; fit(); draw();
+  };
   img.src = src;
   zoom.oninput = () => {
     const cx = W - st.x, cy = H - st.y;
@@ -567,19 +665,38 @@ function openCropper(src) {
   canvas.onpointerup = () => { drag = null; };
   canvas.onwheel = (e) => { e.preventDefault(); zoom.value = Math.min(4, Math.max(1, Number(zoom.value) - e.deltaY * 0.001)); zoom.oninput(); };
   const rotate = () => { st.rot = (st.rot + 90) % 360; zoom.value = 1; fit(); draw(); };
+  const setAspect = (k) => {
+    [W, H] = ASPECTS[k];
+    canvas.width = W * 2; canvas.height = H * 2; canvas.style.cssText = `width:${W}px;height:${H}px`;
+    zoom.value = 1; if (source) { fit(); draw(); }
+  };
+  const BGS = [['none', t('photo.bgNone')], ['#ffffff', t('photo.bgWhite')], ['#eef1f5', t('photo.bgGray')], ['#dce8f5', t('photo.bgBlue')]];
+  const bgBtns = h('div', { class: 'bg-swatches' }, BGS.map(([c, l]) => h('button', { type: 'button', class: `bg-sw${c === fx.bg ? ' on' : ''}`, 'data-c': c, title: l, style: c === 'none' ? '' : `background:${c}`, onclick: (e) => {
+    fx.bg = c; bgBtns.querySelectorAll('.bg-sw').forEach((b) => b.classList.toggle('on', b.dataset.c === c)); tolRow.hidden = c === 'none'; reprocess();
+  } }, c === 'none' ? '∅' : '')), h('input', { type: 'color', value: '#ffffff', title: t('photo.bgCustom'), oninput: (e) => { fx.bg = e.target.value; bgBtns.querySelectorAll('.bg-sw').forEach((b) => b.classList.remove('on')); tolRow.hidden = false; reprocess(); } }));
+  const slider = (key, min, max) => h('input', { type: 'range', class: 'range', min, max, step: 1, value: fx[key], oninput: (e) => { fx[key] = Number(e.target.value); reprocess(); } });
+  const tolRow = h('label', { class: 'ed-field', hidden: true }, h('span', null, t('photo.tolerance')), slider('tol', 8, 70));
+  const aspect = h('select', { class: 'input', onchange: (e) => setAspect(e.target.value) }, Object.keys(ASPECTS).map((k) => h('option', { value: k }, t('photo.aspect.' + k.replace(':', '_')))));
 
   modal({
-    title: t('photoCrop'),
-    body: h('div', { class: 'cropper' }, canvas,
-      h('div', { class: 'crop-tools' },
-        h('label', { class: 'ed-field inline' }, h('span', null, t('zoom')), zoom),
-        h('button', { class: 'btn', onclick: rotate }, '⟳ ' + t('rotate'))),
-      h('p', { class: 'muted small' }, t('cropHint'))),
+    title: t('photoCrop'), wide: true,
+    body: h('div', { class: 'cropper2' },
+      h('div', { class: 'cropper' }, canvas,
+        h('div', { class: 'crop-tools' },
+          h('label', { class: 'ed-field inline' }, h('span', null, t('zoom')), zoom),
+          h('button', { class: 'btn', onclick: rotate }, '⟳ ' + t('rotate'))),
+        h('p', { class: 'muted small' }, t('cropHint'))),
+      h('div', { class: 'photo-fx' },
+        h('label', { class: 'ed-field' }, h('span', null, t('photo.aspect')), aspect),
+        h('div', { class: 'ed-field' }, h('span', null, t('photo.bg')), bgBtns), tolRow,
+        h('p', { class: 'muted small' }, t('photo.bgHint')),
+        h('label', { class: 'ed-field' }, h('span', null, t('photo.bright')), slider('bright', -40, 40)),
+        h('label', { class: 'ed-field' }, h('span', null, t('photo.contrast')), slider('contrast', -40, 40)))),
     buttons: [
       { label: t('cancel') },
       { label: t('save'), kind: 'primary', action: (close) => {
         const out = document.createElement('canvas');
-        out.width = 600; out.height = 800;
+        out.width = 600; out.height = Math.round((600 * H) / W);
         draw(out.getContext('2d'), 600 / (W * 2));
         S.cur.photo.data = out.toDataURL('image/jpeg', 0.9);
         S.cur.photo.original = src.length < 6e6 ? src : '';
@@ -767,10 +884,22 @@ function fieldInput(s, it, f) {
   const label = t('field.' + f.k);
   const set = (v, input) => { it[f.k] = v; changed(); if (input) refreshItemTitle(input, s, it); };
   switch (f.type) {
-    case 'textarea':
-      return h('label', { class: 'ed-field full' }, h('span', null, label),
-        h('textarea', { class: 'input', rows: f.rows || 3, dir: 'auto', oninput: (e) => set(e.target.value, e.target) }, it[f.k] || ''),
+    case 'textarea': {
+      const ta = h('textarea', { class: 'input', rows: f.rows || 3, dir: 'auto', spellcheck: 'true', oninput: (e) => set(e.target.value, e.target) }, it[f.k] || '');
+      const ai = Pro.improvable(s, f) ? h('button', { type: 'button', class: 'btn small ai-btn', title: t('ai.improveTitle'), onclick: (e) => { e.preventDefault(); Pro.improveField(s, it, f.k, ta); } }, '✦ ' + t('ai.improve')) : null;
+      return h('div', { class: 'ed-field full' }, h('span', { class: 'ed-label-row' }, h('span', null, label), ai), ta,
         s.type !== 'summary' ? h('small', { class: 'muted' }, t('bulletHint')) : null);
+    }
+    case 'day': {
+      const dp = datePicker(it[f.k], (v) => set(v), { withDay: true });
+      dp.dataset.k = f.k;
+      const left = it[f.k] && AV.parseDay(it[f.k]) ? Math.ceil((AV.parseDay(it[f.k]) - new Date()) / 86400000) : null;
+      const warn = left === null ? null : left < 0 ? h('small', { class: 'exp-flag expired' }, '⚠ ' + t('exp.expired')) : left <= (S.settings.expiryDays || 90) ? h('small', { class: 'exp-flag soon' }, '⏳ ' + t('exp.left', { n: left })) : null;
+      return h('label', { class: 'ed-field' }, h('span', null, label), dp, warn);
+    }
+    case 'number':
+      return h('label', { class: 'ed-field' }, h('span', null, label),
+        h('input', { class: 'input', type: 'text', inputmode: 'decimal', dir: 'ltr', value: it[f.k] || '', placeholder: '0', oninput: (e) => { e.target.value = e.target.value.replace(/[^\d.,]/g, ''); set(e.target.value, e.target); } }));
     case 'check':
       return h('label', { class: 'ed-check' }, h('input', { type: 'checkbox', checked: f.k === 'append' ? it[f.k] !== false : !!it[f.k], onchange: (e) => {
         it[f.k] = e.target.checked; changed();
@@ -796,9 +925,12 @@ function fieldInput(s, it, f) {
     case 'phones':
       if (!Array.isArray(it.phones) || !it.phones.length) it.phones = [newPhone()];
       return h('div', { class: 'ed-field full' }, h('span', null, t('field.phones')), phonesEditor(it.phones, () => {}));
-    default:
+    default: {
+      // öneri listesi (lisans, otorite, uçak tipi, yetki, sertifika): serbest yazı da kabul edilir
+      const dl = f.list ? Pro.datalist(f.list) : null;
       return h('label', { class: 'ed-field' }, h('span', null, label),
-        h('input', { class: 'input', type: 'text', value: it[f.k] || '', dir: 'auto', oninput: (e) => set(e.target.value, e.target) }));
+        h('input', { class: 'input', type: 'text', value: it[f.k] || '', dir: 'auto', list: dl ? dl.id : null, oninput: (e) => set(e.target.value, e.target) }), dl ? dl.el : null);
+    }
   }
 }
 
@@ -905,6 +1037,7 @@ function designPanel() {
   const swatches = h('div', { class: 'swatches' }, ['#3b82f6', '#0f4c81', '#1f2937', '#0f766e', '#059669', '#9d174d', '#b91c1c', '#c2410c', '#7c3aed', '#a16207'].map((c) =>
     h('button', { class: 'swatch', style: `background:${c}`, title: c, onclick: () => { d.accent = c; changed(true); } })));
   const fsOut = h('b', null, `${d.fontSize} pt`);
+  wrap.append(Pro.qrCard());
 
   wrap.append(h('div', { class: 'ed-card open static' },
     h('div', { class: 'ed-card-head static' }, h('span', { class: 'ed-card-icon' }, '🖌'), h('span', { class: 'ed-card-title' }, t('customize'))),
@@ -962,6 +1095,7 @@ function importTemplate(file) {
 /* ---------- preview ---------- */
 
 const schedulePreview = debounce(renderPreview, 120);
+const scheduleBadge = debounce(() => Pro.updateBadge(), 400);
 const PX_PER_MM = 96 / 25.4;
 
 function renderPreview() {
@@ -972,6 +1106,8 @@ function renderPreview() {
   const cvEl = sheet.firstElementChild;
   const pageH = 297 * PX_PER_MM;
   const pages = Math.max(1, Math.ceil((cvEl.scrollHeight - 2) / pageH));
+  S.pages = pages;
+  scheduleBadge();
   for (let i = 1; i < pages; i++) sheet.append(h('div', { class: 'page-guide', style: `top:${i * pageH}px` }, h('span', null, t('pageN', { n: i + 1 }))));
   $('#page-info').textContent = t('pagesApprox', { n: pages }) + (m.attachments.length ? ' · ' + t('plusAttachments', { n: m.attachments.length }) : '');
   fitPreview();
@@ -1015,7 +1151,7 @@ async function withBusy(label, fn) {
 async function exportPdf() {
   const m = buildModel(S.cur, S.settings.uiLang);
   await withBusy(t('exporting'), async () => {
-    const r = await api.exportPdf({ html: exportHtmlDocument(m), attachments: m.attachments, defaultName: exportName(), title: t('exportPdf'), open: S.settings.openAfterExport });
+    const r = await api.exportPdf({ html: exportHtmlDocument(m), attachments: m.attachments, defaultName: exportName(), title: t('exportPdf'), open: S.settings.openAfterExport, meta: Pro.pdfMeta(S.cur, m) });
     if (r && r.ok) toast(t('savedTo', { path: r.path }), 'ok', 5000);
   });
 }
@@ -1076,18 +1212,20 @@ function settingsCards() {
   const keys = ui.card({ key: 'cv-keys', title: t('shortcutsCard'), icon: 'keyboard' });
   keys.append(h('div', { class: 'shortcuts' }, [['Ctrl+Z', t('undo')], ['Ctrl+Y', t('redo')], ['Ctrl+P', t('exportPdf')], ['F11', t('toggleFullscreen')]].map(([k, v]) =>
     h('div', null, h('kbd', { dir: 'ltr' }, k), ' ', v))));
-  return [exp, data, keys];
+  return [Apps.aiSettingsCard(), exp, data, Apps.privacyCard(), keys];
 }
 
-function openSettings() {
+/** key: açılınca o karta kaydır (ör. 'cv-ai'). */
+function openSettings(key) {
   const m = Kabuk.openSettings(settingsCards());
   renderBackupList();
+  if (typeof key === 'string') setTimeout(() => { const c = document.querySelector(`.cv-settings [data-fc-card="${key}"]`); if (c) { c.scrollIntoView({ behavior: 'smooth', block: 'start' }); c.classList.add('flash'); } }, 120);
   return m;
 }
 
 async function backupNowAction() {
   persistCvs.flush();
-  api.saveCvsSync({ version: 1, cvs: S.cvs });
+  api.saveCvsSync(dataDoc());
   await api.createBackup();
   toast(t('backupDone'), 'ok');
 }

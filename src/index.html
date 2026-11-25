@@ -3,9 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="color-scheme" content="dark">
-  <!-- connect-src: admin gelen kutusu + yedek e-posta (çekirdek iletişim/çökme), duyurular, kullanıcının kendi AI anahtarıyla Asistan Agent önerileri.
+  <!-- connect-src: admin gelen kutusu + yedek e-posta (çekirdek iletişim/çökme), duyurular, kullanıcının kendi AI anahtarıyla yapay zekâ
+       (Gemini / OpenAI / Anthropic / Groq) ve isteğe bağlı yerel model (Ollama, 127.0.0.1:11434).
        Güncelleme dosyaları ana süreçte indirilir (fcHost.net). -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'; worker-src 'self' blob:; connect-src 'self' data: blob: https://raw.githubusercontent.com https://github.com https://firestore.googleapis.com https://formsubmit.co https://generativelanguage.googleapis.com https://api.openai.com https://api.anthropic.com https://api.groq.com">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'; worker-src 'self' blob:; connect-src 'self' data: blob: https://raw.githubusercontent.com https://github.com https://firestore.googleapis.com https://formsubmit.co https://generativelanguage.googleapis.com https://api.openai.com https://api.anthropic.com https://api.groq.com http://127.0.0.1:11434 http://localhost:11434">
   <title>CV Maker</title>
   <link rel="stylesheet" href="cekirdek/css/tokens.css">
   <link rel="stylesheet" href="cekirdek/css/core.css">
@@ -35,11 +36,14 @@
       <nav class="tabs">
         <button class="tab active" data-tab="content" data-i18n="tabContent"></button>
         <button class="tab" data-tab="design" data-i18n="tabDesign"></button>
+        <button class="tab" data-tab="analysis" data-i18n="tabAnalysis"></button>
+        <button class="tab" data-tab="apps" data-i18n="tabApps"></button>
       </nav>
       <div id="editor" class="editor"></div>
     </aside>
     <section class="preview-pane">
       <div class="preview-toolbar">
+        <button id="score-badge" class="score-badge" type="button"></button>
         <span id="page-info" class="muted"></span>
         <div class="tb-spacer"></div>
         <button class="tb-btn icon" id="zoom-out">−</button>
@@ -58,12 +62,19 @@
   <div id="menu-root"></div>
 
   <script src="../node_modules/pdfjs-dist/build/pdf.min.js"></script>
+  <script src="../node_modules/qrcode-generator/qrcode.js"></script>
   <script src="cekirdek/fc-core.js"></script>
   <script src="i18n.js"></script>
+  <script src="i18n-pro.js"></script>
   <script src="schema.js"></script>
+  <script src="aviation.js"></script>
+  <script src="checks.js"></script>
+  <script src="ai.js"></script>
   <script src="samples.js"></script>
   <script src="render.js"></script>
   <script src="kabuk.js"></script>
   <script src="app.js"></script>
+  <script src="pro.js"></script>
+  <script src="apps.js"></script>
 </body>
 </html>
